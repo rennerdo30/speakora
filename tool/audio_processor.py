@@ -60,11 +60,12 @@ class AudioProcessor:
                 warnings.filterwarnings('ignore', category=FutureWarning, module='librosa')
                 warnings.filterwarnings('ignore', category=UserWarning, module='librosa')
                 info = librosa.get_duration(path=str(file_path))
-                # Get native sample rate by loading a small sample
+                # Get native sample rate by loading a small sample (for duration calculation)
                 waveform_sample, native_sr = librosa.load(str(file_path), sr=None, duration=0.1)
             
-            # Calculate block size in samples
-            block_size_samples = int(chunk_duration_sec * native_sr)
+            # Calculate block size in samples using target_sample_rate
+            # (we'll resample everything to target_sample_rate anyway)
+            block_size_samples = int(chunk_duration_sec * self.target_sample_rate)
             
             # Use librosa's streaming capability or load in chunks
             # librosa doesn't have direct streaming, so we'll use torchaudio or load in chunks
