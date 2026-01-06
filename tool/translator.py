@@ -46,55 +46,99 @@ class SeamlessTranslator:
         """Translate a single audio file with optional voice preservation."""
         if self.model is None:
             self.load_model()
-
+            
         logger.info(f"Translating {input_file} to {target_lang}...")
         
-        # 1. Load and process audio
-        waveform, sample_rate = self.audio_processor.load_audio(input_file)
-        
-        # 2. Prepare inputs for SeamlessM4T
-        inputs = self.processor(
-            audios=waveform.squeeze().numpy(),
-            sampling_rate=sample_rate,
-            return_tensors="pt"
-        )
-        
-        # Move tensors to device
-        inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
-        
-        if self.config.model.dtype == "float16" and self.device != "cpu":
-            inputs = {k: v.to(torch.float16) if isinstance(v, torch.Tensor) and v.dtype == torch.float32 else v for k, v in inputs.items()}
-
-        # 3. Handle speaker embeddings for expressive mode/voice preservation
-        generate_kwargs = {
-            "tgt_lang": target_lang,
-            "src_lang": source_lang if source_lang != "auto" else None,
-            "num_beams": self.config.model.num_beams,
-            "do_sample": self.config.model.temperature != 1.0,
-            "temperature": self.config.model.temperature
-        }
-
         if reference_audio and reference_audio.exists():
             logger.info(f"Using reference audio from {reference_audio} for voice preservation.")
-            ref_waveform, _ = self.audio_processor.load_audio(reference_audio)
-            # The processor can extract speaker metadata/embeddings if supported by the specific model variant
-            # For SeamlessM4Tv2, we can pass the reference audio through the processor to get spkr_id/embeddings
-            # but usually it's better to just use the v2 model's native expressive capabilities
-            # For this implementation, we'll mark metadata that reference was used
+             # For this implementation, we acknowledge it but don't strictly use it in the chunk loop 
+             # because we aren't extracting speaker embeddings manually here.
+             # Ideally we would pass 'spkr_id' or embeddings if extracting them.
             pass
+        
+        # 1. Load audio (entire file into RAM - manageable for < 2-3 hours)
+        waveform, sample_rate = self.audio_processor.load_audio(input_file)
+        
+        total_samples = waveform.size(-1)
+        CHUNK_SIZE_SEC = 60
+        CHUNK_SAMPLES = CHUNK_SIZE_SEC * sample_rate
+        
+        translated_audio_pieces = []
+        translated_text_pieces = []
+        
+        import numpy as np
+        
+        # Flatten waveform for processing
+        waveform_flat = waveform.squeeze() # (samples,)
+        
+        # If empty or too short, handle gracefully
+        if waveform_flat.numel() == 0:
+             return {
+                "source_file": str(input_file),
+                "status": "failed",
+                "error": "Empty audio file"
+             }
 
-        # 4. Inference
-        with torch.no_grad():
-            output = self.model.generate(
-                **inputs,
-                **generate_kwargs
-            )
+        num_chunks = int(np.ceil(total_samples / CHUNK_SAMPLES))
+        logger.info(f"Audio duration: {total_samples/sample_rate:.2f}s. Splitting into {num_chunks} chunks.")
+        
+        for i in range(num_chunks):
+            start = i * CHUNK_SAMPLES
+            end = min(start + CHUNK_SAMPLES, total_samples)
+            chunk_waveform = waveform_flat[start:end]
             
-        # output is a tuple (audio, text) for S2ST
-        translated_audio = output[0]
-        translated_text = ""
-        if len(output) > 1 and self.config.translation.return_intermediate_text:
-            translated_text = self.processor.batch_decode(output[1], skip_special_tokens=True)[0]
+            logger.info(f"Processing chunk {i+1}/{num_chunks}...")
+            
+            # Prepare inputs
+            inputs = self.processor(
+                audios=chunk_waveform.numpy(),
+                sampling_rate=sample_rate,
+                return_tensors="pt"
+            ).to(self.device)
+            
+            # Dtype fix
+            inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+            if self.config.model.dtype == "float16" and self.device != "cpu":
+                inputs = {k: v.to(torch.float16) if isinstance(v, torch.Tensor) and v.dtype == torch.float32 else v for k, v in inputs.items()}
+
+            generate_kwargs = {
+                "tgt_lang": target_lang,
+                "src_lang": source_lang if source_lang != "auto" else None,
+                "num_beams": self.config.model.num_beams,
+                "do_sample": self.config.model.temperature != 1.0,
+                "temperature": self.config.model.temperature
+            }
+            
+            with torch.no_grad():
+                output = self.model.generate(
+                    **inputs,
+                    **generate_kwargs
+                )
+            
+            # Handle output
+            if isinstance(output, tuple):
+                 val = output[0]
+                 tokens = output[1]
+            else:
+                 val = output.waveform
+                 tokens = output.sequences
+            
+            chunk_audio = val.cpu().numpy().squeeze()
+            chunk_text = self.processor.batch_decode(tokens, skip_special_tokens=True)[0]
+            
+            translated_audio_pieces.append(chunk_audio)
+            translated_text_pieces.append(chunk_text)
+            
+        # Concatenate results
+        if len(translated_audio_pieces) > 0:
+            final_audio = np.concatenate(translated_audio_pieces)
+        else:
+            final_audio = np.array([])
+            
+        translated_text = " ".join(translated_text_pieces)
+        translated_audio = torch.from_numpy(final_audio)
+        if translated_audio.dim() == 1:
+            translated_audio = translated_audio.unsqueeze(0)
 
         # 4. Save output
         if output_file is None:

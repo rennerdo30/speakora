@@ -18,6 +18,14 @@ class Worker:
     def start(self):
         """Start the background worker."""
         logger.info("Starting background worker...")
+        
+        # Reset stale jobs
+        stale_jobs = self.queue.list_jobs(status=JobStatus.RUNNING)
+        if stale_jobs:
+            logger.warning(f"Found {len(stale_jobs)} stale jobs. Marking them as FAILED.")
+            for job in stale_jobs:
+                self.queue.update_job_status(job.id, JobStatus.FAILED, error_message="Worker restarted while job was running.")
+        
         self.running = True
         self.translator.load_model()
         

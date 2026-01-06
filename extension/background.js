@@ -55,15 +55,32 @@ async function startTranslation() {
 
     socket.onclose = () => {
         console.log("Disconnected from translation server.");
-        isTranslating = false;
-        chrome.runtime.sendMessage({ action: "status_update", status: "disconnected" });
-        // Clean up offscreen
-        chrome.offscreen.closeDocument();
+        if (isTranslating) {
+            // Unexpected close, try to reconnect
+            console.log("Attempting to reconnect in 5 seconds...");
+            chrome.runtime.sendMessage({ action: "status_update", status: "reconnecting" });
+
+            setTimeout(() => {
+                if (isTranslating) { // Check if user didn't stop manually
+                    startTranslation();
+                }
+            }, 5000);
+
+            // Clean up offscreen capture during reconnection wait
+            chrome.runtime.sendMessage({
+                type: 'stop-capture',
+                target: 'offscreen'
+            });
+            chrome.offscreen.closeDocument().catch(() => { });
+        } else {
+            chrome.runtime.sendMessage({ action: "status_update", status: "disconnected" });
+            chrome.offscreen.closeDocument().catch(() => { });
+        }
     };
 
     socket.onerror = (err) => {
         console.error("WebSocket error:", err);
-        stopTranslation();
+        // Do not force stop here, let onclose handle reconnection if needed
     };
 }
 
@@ -87,14 +104,15 @@ async function setupOffscreenDocument(streamId) {
 }
 
 function stopTranslation() {
+    isTranslating = false; // Set flag false first to prevent auto-reconnect
     if (socket) {
         socket.close();
         socket = null;
     }
-    isTranslating = false;
 
     chrome.runtime.sendMessage({
         type: 'stop-capture',
         target: 'offscreen'
     });
+    chrome.offscreen.closeDocument().catch(() => { });
 }
