@@ -126,6 +126,25 @@ def create_app(cfg: Config) -> FastAPI:
         background_tasks.add_task(run_download)
         return {"status": "download started"}
 
+    @app.get("/api/system/config")
+    async def get_config():
+        return cfg.dict()
+
+    @app.patch("/api/system/config")
+    async def update_config(new_cfg: dict):
+        # Update current config object
+        # This is basic, for real production we'd use pydantic validation better
+        for key, value in new_cfg.items():
+            if hasattr(cfg, key):
+                current_attr = getattr(cfg, key)
+                if isinstance(current_attr, BaseModel) and isinstance(value, dict):
+                    for sub_key, sub_value in value.items():
+                        if hasattr(current_attr, sub_key):
+                            setattr(current_attr, sub_key, sub_value)
+                else:
+                    setattr(cfg, key, value)
+        return cfg.dict()
+
     @app.get("/api/system/info")
     async def system_info():
         from .device_manager import get_device_info
