@@ -75,60 +75,52 @@ class SeamlessTranslator:
         except:
              total_chunks = 0
 
+        batch_waveforms = []
+        current_batch_indices = []
+
         for chunk_waveform, chunk_sample_rate in self.audio_processor.stream_audio(input_file, CHUNK_SIZE_SEC):
             got_chunks = True
             chunk_idx += 1
-            logger.info(f"Processing chunk {chunk_idx}...")
             
-            # Prepare inputs
-            # chunk_waveform is already a tensor (channels, length) or (1, length)
-            # Remove channel dim if 1 for processor?
-            # processor expects (batch, samples) or (samples,)
-            # if we pass (1, samples), it treats as batch 1.
+            # Squeeze (1, len) -> (len,) or keep (1, len)?
+            # Processor expects list of (len,) usually for batching.
+            waveform_squeezed = chunk_waveform.squeeze()
+            batch_waveforms.append(waveform_squeezed.numpy())
+            current_batch_indices.append(chunk_idx)
             
-            # Note: stream_audio yields tensor on CPU
-            
-            # Convert to numpy for processor (huggingface processor usually takes numpy or list)
-            # if we pass tensor, it might convert to numpy properly.
-            
-            inputs = self.processor(
-                audios=chunk_waveform.squeeze().numpy(),
-                sampling_rate=chunk_sample_rate,
-                return_tensors="pt"
-            ).to(self.device)
-            
-            # Dtype fix
-            inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
-            if self.config.model.dtype == "float16" and self.device != "cpu":
-                inputs = {k: v.to(torch.float16) if isinstance(v, torch.Tensor) and v.dtype == torch.float32 else v for k, v in inputs.items()}
-
-            generate_kwargs = {
-                "tgt_lang": target_lang,
-                "src_lang": source_lang if source_lang != "auto" else None,
-                "num_beams": self.config.model.num_beams,
-                "do_sample": self.config.model.temperature != 1.0,
-                "temperature": self.config.model.temperature
-            }
-            
-            with torch.no_grad():
-                output = self.model.generate(
-                    **inputs,
-                    **generate_kwargs
+            if len(batch_waveforms) >= self.config.processing.batch_size:
+                self._process_batch_and_append(
+                    batch_waveforms, 
+                    chunk_sample_rate, 
+                    target_lang, 
+                    source_lang, 
+                    translated_audio_pieces, 
+                    translated_text_pieces
                 )
-            
-            # Handle output
-            if isinstance(output, tuple):
-                 val = output[0]
-                 tokens = output[1]
-            else:
-                 val = output.waveform
-                 tokens = output.sequences
-            
-            chunk_audio = val.cpu().numpy().squeeze()
-            chunk_text = self.processor.batch_decode(tokens, skip_special_tokens=True)[0]
-            
-            translated_audio_pieces.append(chunk_audio)
-            translated_text_pieces.append(chunk_text)
+                logger.info(f"Processed chunks {current_batch_indices[0]}-{current_batch_indices[-1]}")
+                
+                # Update progress
+                if progress_callback and total_chunks > 0:
+                     progress = (current_batch_indices[-1] / total_chunks) * 100.0
+                     progress_callback(min(progress, 99.0))
+                
+                batch_waveforms = []
+                current_batch_indices = []
+
+        # Process remaining
+        if batch_waveforms:
+            self._process_batch_and_append(
+                batch_waveforms, 
+                chunk_sample_rate, # valid from last iteration
+                target_lang, 
+                source_lang, 
+                translated_audio_pieces, 
+                translated_text_pieces
+            )
+            logger.info(f"Processed chunks {current_batch_indices[0]}-{current_batch_indices[-1]}")
+            if progress_callback and total_chunks > 0:
+                 progress = (current_batch_indices[-1] / total_chunks) * 100.0
+                 progress_callback(min(progress, 99.0))
             
             if progress_callback and total_chunks > 0:
                  progress = (chunk_idx / total_chunks) * 100.0
@@ -238,3 +230,66 @@ class SeamlessTranslator:
         translated_audio_bytes = (translated_audio * 32768.0).astype(np.int16).tobytes()
         
         return translated_audio_bytes, translated_text
+
+    def _process_batch_and_append(
+        self,
+        batch_waveforms,
+        sample_rate,
+        target_lang,
+        source_lang,
+        translated_audio_pieces,
+        translated_text_pieces
+    ):
+        """Helper to process a batch of waveforms and append results."""
+        import numpy as np
+        import torch
+        
+        # Prepare inputs
+        inputs = self.processor(
+            audios=batch_waveforms,
+            sampling_rate=sample_rate,
+            return_tensors="pt",
+            padding=True # padding is automatic for list but robust to strict it
+        ).to(self.device)
+        
+        # Dtype fix
+        inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+        if self.config.model.dtype == "float16" and self.device != "cpu":
+            inputs = {k: v.to(torch.float16) if isinstance(v, torch.Tensor) and v.dtype == torch.float32 else v for k, v in inputs.items()}
+
+        generate_kwargs = {
+            "tgt_lang": target_lang,
+            "src_lang": source_lang if source_lang != "auto" else None,
+            "num_beams": self.config.model.num_beams,
+            "do_sample": self.config.model.temperature != 1.0,
+            "temperature": self.config.model.temperature
+        }
+        
+        with torch.no_grad():
+            output = self.model.generate(
+                **inputs,
+                **generate_kwargs
+            )
+        
+        # Handle output
+        if isinstance(output, tuple):
+             val = output[0]
+             tokens = output[1]
+        else:
+             val = output.waveform
+             tokens = output.sequences
+        
+        # Output val is (batch, samples) or (batch, 1, samples)?
+        # SeamlessM4T: output.waveform is (batch, 1, samples)
+        
+        generated_audio_np = val.cpu().numpy()
+        decoded_texts = self.processor.batch_decode(tokens, skip_special_tokens=True)
+        
+        # Iterate and append
+        for i in range(len(batch_waveforms)):
+            # Audio
+            one_audio = generated_audio_np[i].squeeze()
+            translated_audio_pieces.append(one_audio)
+            
+            # Text
+            translated_text_pieces.append(decoded_texts[i])
