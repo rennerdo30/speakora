@@ -1,0 +1,179 @@
+# ============================================================================
+# SeamlessM4T v2 Speech-to-Speech Translation - Example Configuration
+# ============================================================================
+# This file contains all available configuration options with descriptions.
+# Copy this to default.yaml and customize as needed.
+# ============================================================================
+
+# === Model Settings ===
+# Configuration for the SeamlessM4T v2 model
+model:
+  # Model size: small, medium, or large
+  # - small: ~300MB, fastest, lower quality
+  # - medium: ~1.2GB, balanced
+  # - large: ~2.3GB, best quality (recommended)
+  size: "large"
+  
+  # Expressive mode: preserves speaker's voice characteristics
+  # Requires more GPU memory and processing time
+  expressive: false
+  
+  # Device selection:
+  # - auto: automatically detect best available (GPU > CPU)
+  # - cuda: NVIDIA GPU (Linux/Windows)
+  # - mps: Apple Silicon GPU (macOS)
+  # - rocm: AMD GPU (Linux)
+  # - cpu: CPU only (fallback)
+  device: "auto"
+  
+  # Data type for model weights:
+  # - float16: half precision (faster, less memory)
+  # - float32: full precision (slower, more accurate)
+  dtype: "float16"
+  
+  # HuggingFace model cache directory
+  cache_dir: "~/.cache/huggingface/hub"
+  
+  # Decoding beam size (higher = better quality, slower)
+  num_beams: 5
+  
+  # Generation temperature (1.0 = default, lower = more deterministic)
+  temperature: 1.0
+
+# === Translation Settings ===
+translation:
+  # Source language code or "auto" for detection
+  # Common codes: eng, deu, fra, spa, ita, por, jpn, cmn, kor
+  source_lang: "auto"
+  
+  # Target language code (required)
+  target_lang: "eng"
+  
+  # Translation task:
+  # - s2st: speech-to-speech (audio output)
+  # - s2tt: speech-to-text (text output only)
+  task: "s2st"
+  
+  # Include intermediate text in output metadata
+  return_intermediate_text: true
+
+# === Audio Settings ===
+audio:
+  # Target sample rate for processing (16kHz recommended)
+  target_sample_rate: 16000
+  
+  # Normalize audio levels
+  normalize: true
+  
+  # Convert stereo to mono
+  to_mono: true
+
+# === Paths ===
+paths:
+  # Input directory for audio files
+  input_dir: "./input"
+  
+  # Output directory root
+  output_dir: "./output"
+  
+  # Subdirectory for translated audio files
+  translated_subdir: "translated"
+  
+  # Subdirectory for metadata JSON files
+  metadata_subdir: "metadata"
+  
+  # Subdirectory for log files
+  logs_subdir: "logs"
+
+# === Logging ===
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+  
+  console:
+    # Enable console output
+    enabled: true
+    # Console log format
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  file:
+    # Enable file logging
+    enabled: true
+    # Maximum log file size in bytes (10MB)
+    max_bytes: 10485760
+    # Number of backup files to keep
+    backup_count: 5
+    # File log format (includes file and line number)
+    format: "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
+  
+  # Output logs in JSON format (useful for log aggregation)
+  json_log: false
+
+# === Processing ===
+processing:
+  # Number of parallel workers
+  # More workers = faster processing, but more memory
+  num_workers: 1
+  
+  # Batch size for model inference
+  # Higher = faster, but more memory
+  batch_size: 1
+  
+  # Skip files that already exist in output directory
+  skip_existing: true
+  
+  # Preview mode: show what would be processed without doing it
+  dry_run: false
+  
+  # Resume from last checkpoint on restart
+  resume_from_checkpoint: true
+
+# === Advanced ===
+advanced:
+  # Enable automatic mixed precision for faster inference
+  use_amp: true
+  
+  # Number of CPU threads for data loading
+  num_threads: 4
+  
+  # Use TorchScript optimization (experimental)
+  use_torchscript: false
+  
+  # Random seed for reproducibility
+  seed: 42
+
+# === Security (API) ===
+security:
+  # API key for authentication (leave empty to disable)
+  api_key: ""
+  
+  # Rate limiting: max requests per minute
+  rate_limit: 100
+
+# ============================================================================
+# Supported Languages (SeamlessM4T v2)
+# ============================================================================
+# Common language codes:
+# - eng: English
+# - deu: German
+# - fra: French
+# - spa: Spanish
+# - ita: Italian
+# - por: Portuguese
+# - jpn: Japanese
+# - cmn: Mandarin Chinese
+# - kor: Korean
+# - rus: Russian
+# - arb: Arabic
+# - hin: Hindi
+# - tur: Turkish
+# - vie: Vietnamese
+# - tha: Thai
+# - nld: Dutch
+# - pol: Polish
+# - swe: Swedish
+# - ukr: Ukrainian
+# 
+# For full list: python -m tool.main list-models
+# ============================================================================
+

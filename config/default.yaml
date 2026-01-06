@@ -1,0 +1,59 @@
+# === Model Settings ===
+model:
+  size: "large"                    # small, medium, large
+  expressive: false                # Preserve speaker voice
+  device: "auto"                   # auto, cuda, mps, rocm, cpu
+  dtype: "float16"                 # float32, float16
+  cache_dir: "~/.cache/huggingface/hub"
+  num_beams: 5                     # Decoding beam size
+  temperature: 1.0                 # Generation temperature
+
+# === Translation Settings ===
+translation:
+  source_lang: "auto"              # Language code or auto-detect
+  target_lang: "eng"               # Required language code
+  task: "s2st"                     # s2st, s2tt
+  return_intermediate_text: true   # Include translated text
+
+# === Audio Settings ===
+audio:
+  target_sample_rate: 16000        # Resampling target
+  normalize: true                  # Audio normalization
+  to_mono: true                    # Convert to mono
+
+# === Paths ===
+paths:
+  input_dir: "./input"
+  output_dir: "./output"
+  translated_subdir: "translated"
+  metadata_subdir: "metadata"
+  logs_subdir: "logs"
+
+# === Logging ===
+logging:
+  level: "INFO"                    # DEBUG, INFO, WARNING, ERROR
+  console:
+    enabled: true
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file:
+    enabled: true
+    max_bytes: 10485760            # 10 MB
+    backup_count: 5
+    format: "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
+  json_log: false
+
+# === Processing ===
+processing:
+  num_workers: 1                   # Parallel workers
+  batch_size: 1                    # Batch size for inference
+  skip_existing: true              # Skip files in output
+  dry_run: false                   # Preview without processing
+  resume_from_checkpoint: true     # Resume from last checkpoint
+
+# === Advanced ===
+advanced:
+  use_amp: true                    # Mixed precision
+  num_threads: 4                   # Worker threads
+  use_torchscript: false           # TorchScript optimization
+  seed: 42                         # Random seed
+
