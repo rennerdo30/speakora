@@ -40,6 +40,11 @@ def cli(ctx, config, log_level):
 @click.pass_obj
 def translate(cfg: Config, input, target_lang, source_lang):
     """Run S2ST translation on a single file."""
+    from .languages import validate_language
+    if not validate_language(target_lang):
+        click.echo(f"Error: Unsupported language code '{target_lang}'.", err=True)
+        sys.exit(1)
+
     translator = SeamlessTranslator(cfg)
     try:
         translator.translate_audio(Path(input), target_lang, source_lang)
@@ -102,6 +107,11 @@ def job():
 @click.pass_obj
 def job_submit(cfg: Config, input, target_lang, priority):
     """Submit a new job to the queue."""
+    from .languages import validate_language
+    if not validate_language(target_lang):
+        click.echo(f"Error: Unsupported language code '{target_lang}'.", err=True)
+        return
+
     db_path = Path(cfg.paths.output_dir) / "jobs.db"
     queue = JobQueue(db_path)
     input_path = Path(input)

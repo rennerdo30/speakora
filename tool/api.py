@@ -37,6 +37,14 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.post("/api/jobs")
     async def create_job(job_data: JobCreate):
+        from .languages import validate_language
+        if not validate_language(job_data.target_lang):
+            raise HTTPException(status_code=400, detail=f"Unsupported target language: {job_data.target_lang}")
+        
+        input_path = Path(job_data.input_file)
+        if not input_path.exists():
+            raise HTTPException(status_code=400, detail=f"Input file does not exist: {job_data.input_file}")
+
         job_id = queue.enqueue(
             job_data.input_file, 
             job_data.target_lang, 
