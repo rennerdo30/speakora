@@ -6,8 +6,30 @@ import soundfile as sf
 from pathlib import Path
 from typing import Tuple, Union, Optional
 import logging
+import subprocess
+import warnings
 
 logger = logging.getLogger(__name__)
+
+def _check_ffmpeg():
+    """Check if ffmpeg is available for better audio format support."""
+    try:
+        subprocess.run(['ffmpeg', '-version'], 
+                      capture_output=True, 
+                      check=True, 
+                      timeout=2)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+# Check ffmpeg availability once at module load
+_FFMPEG_AVAILABLE = _check_ffmpeg()
+if not _FFMPEG_AVAILABLE:
+    logger.warning(
+        "ffmpeg not found. Some audio formats (.m4a, .mp3, etc.) may not work properly. "
+        "Install ffmpeg for better format support: brew install ffmpeg (macOS) or "
+        "sudo apt-get install ffmpeg (Linux)"
+    )
 
 class AudioProcessor:
     def __init__(
@@ -69,11 +91,14 @@ class AudioProcessor:
                     yield chunk, native_sr
             except Exception:
                 # Fallback: use librosa to load entire file (less memory efficient but works)
-                waveform_np, sr = librosa.load(
-                    str(file_path),
-                    sr=native_sr,
-                    mono=False
-                )
+                with warnings.catch_warnings():
+                    if not _FFMPEG_AVAILABLE:
+                        warnings.filterwarnings('ignore', category=FutureWarning, module='librosa')
+                    waveform_np, sr = librosa.load(
+                        str(file_path),
+                        sr=native_sr,
+                        mono=False
+                    )
                 
                 # Convert to torch tensor
                 if waveform_np.ndim == 1:
@@ -108,11 +133,15 @@ class AudioProcessor:
         # Use librosa as a fallback if torchaudio fails or for better compatibility
         try:
             # We can use librosa for more reliable loading on different platforms
-            waveform_np, sample_rate = librosa.load(
-                str(file_path),
-                sr=self.target_sample_rate,
-                mono=self.to_mono
-            )
+            # Suppress deprecation warnings if ffmpeg is not available
+            with warnings.catch_warnings():
+                if not _FFMPEG_AVAILABLE:
+                    warnings.filterwarnings('ignore', category=FutureWarning, module='librosa')
+                waveform_np, sample_rate = librosa.load(
+                    str(file_path),
+                    sr=self.target_sample_rate,
+                    mono=self.to_mono
+                )
             
             waveform = torch.from_numpy(waveform_np)
             if waveform.dim() == 1:
