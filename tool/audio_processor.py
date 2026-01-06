@@ -72,9 +72,11 @@ class AudioProcessor:
                 # Try torchaudio first (better for streaming)
                 import torchaudio
                 waveform, sr = torchaudio.load(str(file_path))
-                if sr != native_sr:
-                    resampler = torchaudio.transforms.Resample(sr, native_sr)
+                # Always resample to target_sample_rate (16000 Hz for SeamlessM4T)
+                if sr != self.target_sample_rate:
+                    resampler = torchaudio.transforms.Resample(sr, self.target_sample_rate)
                     waveform = resampler(waveform)
+                    sr = self.target_sample_rate
                 
                 # Split into chunks
                 total_samples = waveform.shape[-1]
@@ -92,15 +94,16 @@ class AudioProcessor:
                         if max_val > 0:
                             chunk = chunk / max_val
                     
-                    yield chunk, native_sr
+                    yield chunk, self.target_sample_rate
             except Exception:
                 # Fallback: use librosa to load entire file (less memory efficient but works)
+                # Always resample to target_sample_rate (16000 Hz for SeamlessM4T)
                 with warnings.catch_warnings():
                     if not _FFMPEG_AVAILABLE:
                         warnings.filterwarnings('ignore', category=FutureWarning, module='librosa')
                     waveform_np, sr = librosa.load(
                         str(file_path),
-                        sr=native_sr,
+                        sr=self.target_sample_rate,  # Resample to target rate
                         mono=False
                     )
                 
@@ -126,7 +129,7 @@ class AudioProcessor:
                         if max_val > 0:
                             chunk = chunk / max_val
                     
-                    yield chunk, native_sr
+                    yield chunk, self.target_sample_rate
                 
         except Exception as e:
             logger.error(f"Error streaming audio from {file_path}: {e}")
