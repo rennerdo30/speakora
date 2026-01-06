@@ -56,43 +56,47 @@ class SeamlessTranslator:
              # Ideally we would pass 'spkr_id' or embeddings if extracting them.
             pass
         
-        # 1. Load audio (entire file into RAM - manageable for < 2-3 hours)
-        waveform, sample_rate = self.audio_processor.load_audio(input_file)
-        
-        total_samples = waveform.size(-1)
+        # 1. Process in chunks (streaming from disk)
+        # Use stream_audio for memory efficiency
         CHUNK_SIZE_SEC = 60
-        CHUNK_SAMPLES = CHUNK_SIZE_SEC * sample_rate
         
         translated_audio_pieces = []
         translated_text_pieces = []
         
         import numpy as np
         
-        # Flatten waveform for processing
-        waveform_flat = waveform.squeeze() # (samples,)
+        chunk_idx = 0
         
-        # If empty or too short, handle gracefully
-        if waveform_flat.numel() == 0:
-             return {
-                "source_file": str(input_file),
-                "status": "failed",
-                "error": "Empty audio file"
-             }
+        # Iterate over chunks yielded by stream_audio
+        try:
+             # Just checking if file is empty first effectively requires opening it?
+             # stream_audio will just yield nothing if empty.
+             pass
+        except:
+             pass
 
-        num_chunks = int(np.ceil(total_samples / CHUNK_SAMPLES))
-        logger.info(f"Audio duration: {total_samples/sample_rate:.2f}s. Splitting into {num_chunks} chunks.")
-        
-        for i in range(num_chunks):
-            start = i * CHUNK_SAMPLES
-            end = min(start + CHUNK_SAMPLES, total_samples)
-            chunk_waveform = waveform_flat[start:end]
-            
-            logger.info(f"Processing chunk {i+1}/{num_chunks}...")
+        # We need to track if we got any chunks
+        got_chunks = False
+
+        for chunk_waveform, chunk_sample_rate in self.audio_processor.stream_audio(input_file, CHUNK_SIZE_SEC):
+            got_chunks = True
+            chunk_idx += 1
+            logger.info(f"Processing chunk {chunk_idx}...")
             
             # Prepare inputs
+            # chunk_waveform is already a tensor (channels, length) or (1, length)
+            # Remove channel dim if 1 for processor?
+            # processor expects (batch, samples) or (samples,)
+            # if we pass (1, samples), it treats as batch 1.
+            
+            # Note: stream_audio yields tensor on CPU
+            
+            # Convert to numpy for processor (huggingface processor usually takes numpy or list)
+            # if we pass tensor, it might convert to numpy properly.
+            
             inputs = self.processor(
-                audios=chunk_waveform.numpy(),
-                sampling_rate=sample_rate,
+                audios=chunk_waveform.squeeze().numpy(),
+                sampling_rate=chunk_sample_rate,
                 return_tensors="pt"
             ).to(self.device)
             
@@ -128,6 +132,13 @@ class SeamlessTranslator:
             
             translated_audio_pieces.append(chunk_audio)
             translated_text_pieces.append(chunk_text)
+
+        if not got_chunks:
+             return {
+                "source_file": str(input_file),
+                "status": "failed",
+                "error": "Empty or invalid audio file"
+             }
             
         # Concatenate results
         if len(translated_audio_pieces) > 0:

@@ -36,10 +36,12 @@ def test_translate_audio(mock_translator, tmp_path):
     
     # Create a dummy input file
     input_file = tmp_path / "test.wav"
-    input_file.write_text("dummy") # AudioProcessor is also mocked/patched or we use a real one with dummy data
+    input_file.write_text("dummy") # The content doesn't matter if we mock stream_audio
     
-    with patch("tool.audio_processor.AudioProcessor.load_audio") as mock_load:
-        mock_load.return_value = (torch.zeros(1, 16000), 16000)
+    with patch("tool.audio_processor.AudioProcessor.stream_audio") as mock_stream, \
+         patch("tool.audio_processor.AudioProcessor.save_audio"):
+        # stream_audio should yield (waveform, sample_rate)
+        mock_stream.return_value = [(torch.zeros(1, 16000), 16000)]
         
         metadata = translator.translate_audio(input_file, "deu")
         
