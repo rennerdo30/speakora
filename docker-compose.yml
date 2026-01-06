@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    command: python tool/main.py gui --host 0.0.0.0 --port 5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./output:/app/output
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - SEAMLESS_DEVICE=cpu
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: python tool/main.py worker
+    volumes:
+      - ./output:/app/output
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - SEAMLESS_DEVICE=cpu
+    restart: unless-stopped
