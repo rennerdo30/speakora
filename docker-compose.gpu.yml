@@ -1,8 +1,15 @@
 version: '3.9'
 
+# GPU-enabled docker-compose configuration
+# Requires: nvidia-docker2 or Docker with GPU support
+# Usage: docker-compose -f docker-compose.gpu.yml up
+
 services:
   api:
-    build: .
+    build:
+      context: .
+      args:
+        BASE_IMAGE: nvidia/cuda:12.1-runtime-ubuntu22.04
     command: python tool/main.py gui --host 0.0.0.0 --port 5000
     ports:
       - "5000:5000"
@@ -12,8 +19,9 @@ services:
       - ./config:/app/config
       - ~/.cache/huggingface:/root/.cache/huggingface
     environment:
-      - SEAMLESS_DEVICE=${SEAMLESS_DEVICE:-auto}
+      - SEAMLESS_DEVICE=cuda
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/system/status"]
@@ -22,7 +30,10 @@ services:
       retries: 3
 
   worker:
-    build: .
+    build:
+      context: .
+      args:
+        BASE_IMAGE: nvidia/cuda:12.1-runtime-ubuntu22.04
     command: python tool/main.py worker --num-workers ${NUM_WORKERS:-1}
     volumes:
       - ./input:/app/input
@@ -30,17 +41,18 @@ services:
       - ./config:/app/config
       - ~/.cache/huggingface:/root/.cache/huggingface
     environment:
-      - SEAMLESS_DEVICE=${SEAMLESS_DEVICE:-auto}
+      - SEAMLESS_DEVICE=cuda
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - NUM_WORKERS=${NUM_WORKERS:-1}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
     restart: unless-stopped
     depends_on:
       - api
-    # Uncomment for GPU support (NVIDIA)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+

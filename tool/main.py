@@ -84,16 +84,51 @@ def gui(cfg: Config, port, host):
     uvicorn.run(app, host=host, port=port)
 
 @cli.command()
+@click.option("--num-workers", default=1, help="Number of parallel workers (default: 1).")
 @click.pass_obj
-def worker(cfg: Config):
-    """Start background worker processor."""
+def worker(cfg: Config, num_workers):
+    """Start background worker processor(s)."""
     from .worker import Worker
-    w = Worker(cfg)
-    try:
-        w.start()
-    except KeyboardInterrupt:
-        click.echo("Stopping worker...")
-        w.stop()
+    import threading
+    
+    if num_workers == 1:
+        # Single worker mode
+        w = Worker(cfg, worker_id="worker-main")
+        try:
+            w.start()
+        except KeyboardInterrupt:
+            click.echo("Stopping worker...")
+            w.stop()
+    else:
+        # Multi-worker mode
+        workers = []
+        threads = []
+        
+        def worker_thread(worker_id: str):
+            w = Worker(cfg, worker_id=worker_id)
+            workers.append(w)
+            w.start()
+        
+        click.echo(f"Starting {num_workers} workers...")
+        for i in range(num_workers):
+            thread = threading.Thread(
+                target=worker_thread,
+                args=(f"worker-{i+1}",),
+                daemon=False
+            )
+            thread.start()
+            threads.append(thread)
+        
+        try:
+            # Wait for all threads
+            for thread in threads:
+                thread.join()
+        except KeyboardInterrupt:
+            click.echo("Stopping all workers...")
+            for w in workers:
+                w.stop()
+            for thread in threads:
+                thread.join(timeout=5)
 
 @cli.group()
 def job():
