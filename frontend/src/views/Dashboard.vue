@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Plus, Play, Pause, X, RefreshCw, Cpu, Activity, Clock, Trash2, ExternalLink } from 'lucide-vue-next'
 import NewJobModal from '../components/NewJobModal.vue'
 import JobDetails from '../components/JobDetails.vue'
+import DownloadModelModal from '../components/DownloadModelModal.vue'
 
 interface Job {
   id: string
@@ -16,6 +17,7 @@ const jobs = ref<Job[]>([])
 const loading = ref(true)
 const systemInfo = ref<any>(null)
 const showNewJobModal = ref(false)
+const showDownloadModal = ref(false)
 const selectedJobId = ref<string | null>(null)
 const showDetailsModal = ref(false)
 const detailsRef = ref<any>(null)
@@ -192,6 +194,11 @@ const getStatusBadgeClass = (status: string) => {
       :show="showDetailsModal"
       :jobId="selectedJobId"
       @close="showDetailsModal = false"
+    />
+
+    <DownloadModelModal
+      :show="showDownloadModal"
+      @close="showDownloadModal = false"
     />
   </div>
 </template>

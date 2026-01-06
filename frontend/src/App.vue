@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, provide } from 'vue'
 import Dashboard from './views/Dashboard.vue'
-import { LayoutDashboard, History, Settings, Info } from 'lucide-vue-next'
+import HistoryView from './views/History.vue'
+import { LayoutDashboard, History, Settings, Info, Download } from 'lucide-vue-next'
+import DownloadModelModal from './components/DownloadModelModal.vue'
 
 const activeView = ref('dashboard')
+const showDownloadModal = ref(false)
+
+const triggerDownloadModal = () => {
+  showDownloadModal.value = true
+}
+
+provide('triggerDownloadModal', triggerDownloadModal)
 </script>
 
 <template>
@@ -26,6 +35,10 @@ const activeView = ref('dashboard')
           <Settings :size="20" />
           Settings
         </a>
+        <a @click="triggerDownloadModal">
+          <Download :size="20" />
+          Download Models
+        </a>
       </nav>
       <div class="sidebar-footer">
         <a href="#">
@@ -37,11 +50,17 @@ const activeView = ref('dashboard')
 
     <main class="main-content">
       <Dashboard v-if="activeView === 'dashboard'" />
+      <HistoryView v-else-if="activeView === 'history'" />
       <div v-else class="placeholder-view glass-card fade-in">
         <h2>{{ activeView.charAt(0).toUpperCase() + activeView.slice(1) }}</h2>
         <p>This view is coming soon in Phase 2/3.</p>
       </div>
     </main>
+
+    <DownloadModelModal 
+      :show="showDownloadModal" 
+      @close="showDownloadModal = false" 
+    />
   </div>
 </template>
 
