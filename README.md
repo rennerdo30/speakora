@@ -33,6 +33,11 @@ A production-grade, state-of-the-art speech-to-speech translation (S2ST) system 
 git clone https://github.com/rennerdo30/video-translate-direct.git
 cd video-translate-direct
 
+# Option 1: All-in-one startup (recommended)
+# Updates venv, builds frontend, and starts server
+./start.sh
+
+# Option 2: Manual setup
 # Run setup script (creates venv and installs dependencies)
 ./setup.sh
 
