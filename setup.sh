@@ -37,6 +37,10 @@ pip install --upgrade pip setuptools wheel
 echo "📥 Installing dependencies..."
 pip install -r requirements.txt
 
+# Note: fairseq2 is not required - transformers includes SeamlessM4T v2
+# If you need fairseq2 for advanced features, install it separately:
+# pip install fairseq2  # May require fairseq2n which has platform-specific builds
+
 # Install dev dependencies if available
 if [ -f "requirements-dev.txt" ]; then
     echo "📥 Installing development dependencies..."
