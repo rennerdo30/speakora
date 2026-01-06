@@ -1,5 +1,7 @@
 from fastapi import FastAPI, WebSocket, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, HTMLResponse
 from pathlib import Path
 from typing import List, Optional, Dict
 import asyncio
@@ -24,6 +26,73 @@ class JobCreate(BaseModel):
 
 def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="S2ST Translator API")
+    
+    # Try to mount static files for frontend (if built)
+    frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+    frontend_index = frontend_dist / "index.html"
+    
+    if frontend_dist.exists() and frontend_index.exists():
+        # Serve static files
+        app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+        
+        # Serve index.html for root route
+        @app.get("/", response_class=HTMLResponse)
+        async def read_root():
+            return FileResponse(str(frontend_index))
+        
+        @app.get("/favicon.ico")
+        async def favicon():
+            favicon_path = frontend_dist / "favicon.ico"
+            if favicon_path.exists():
+                return FileResponse(str(favicon_path))
+            raise HTTPException(status_code=404)
+        
+        logger.info(f"Serving frontend from {frontend_dist}")
+    else:
+        # Frontend not built - provide helpful message
+        @app.get("/", response_class=HTMLResponse)
+        async def read_root():
+            return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>S2ST Translator API</title>
+                <style>
+                    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+                    h1 { color: #333; }
+                    .info { background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                    code { background: #e0e0e0; padding: 2px 6px; border-radius: 4px; }
+                    pre { background: #e0e0e0; padding: 12px; border-radius: 4px; overflow-x: auto; }
+                </style>
+            </head>
+            <body>
+                <h1>🚀 S2ST Translator API</h1>
+                <div class="info">
+                    <h2>API is running!</h2>
+                    <p><strong>API Documentation:</strong> <a href="/docs">/docs</a></p>
+                    <p><strong>OpenAPI Schema:</strong> <a href="/openapi.json">/openapi.json</a></p>
+                </div>
+                <div class="info">
+                    <h2>Frontend Setup</h2>
+                    <p>The frontend is not built yet. You have two options:</p>
+                    <ol>
+                        <li><strong>Development Mode:</strong>
+                            <pre><code>cd frontend
+npm install
+npm run dev</code></pre>
+                            This will start the frontend dev server on port 3000 with hot-reload.
+                        </li>
+                        <li><strong>Production Mode:</strong>
+                            <pre><code>cd frontend
+npm install
+npm run build</code></pre>
+                            This will build the frontend and serve it from this API server.
+                        </li>
+                    </ol>
+                </div>
+            </body>
+            </html>
+            """)
     
     # Enhanced CORS - restrict origins in production
     allowed_origins = ["*"]  # In production, set to specific domains
@@ -491,5 +560,18 @@ def create_app(cfg: Config) -> FastAPI:
             logger.error(f"WebSocket error for job {job_id}: {e}")
         finally:
             logger.info(f"Job progress WebSocket disconnected for job: {job_id}")
+
+    # Add catch-all route for SPA at the very end (after all API routes)
+    if frontend_dist.exists() and frontend_index.exists():
+        @app.get("/{full_path:path}", response_class=HTMLResponse)
+        async def serve_spa(full_path: str):
+            # Don't interfere with API routes, docs, or WebSocket
+            if (full_path.startswith("api/") or 
+                full_path.startswith("docs") or 
+                full_path.startswith("openapi.json") or 
+                full_path.startswith("ws/")):
+                raise HTTPException(status_code=404)
+            # Serve index.html for all other routes (SPA routing)
+            return FileResponse(str(frontend_index))
 
     return app
