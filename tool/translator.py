@@ -41,7 +41,8 @@ class SeamlessTranslator:
         target_lang: str,
         source_lang: str = "auto",
         output_file: Optional[Path] = None,
-        reference_audio: Optional[Path] = None
+        reference_audio: Optional[Path] = None,
+        progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """Translate a single audio file with optional voice preservation."""
         if self.model is None:
@@ -50,10 +51,6 @@ class SeamlessTranslator:
         logger.info(f"Translating {input_file} to {target_lang}...")
         
         if reference_audio and reference_audio.exists():
-            logger.info(f"Using reference audio from {reference_audio} for voice preservation.")
-             # For this implementation, we acknowledge it but don't strictly use it in the chunk loop 
-             # because we aren't extracting speaker embeddings manually here.
-             # Ideally we would pass 'spkr_id' or embeddings if extracting them.
             pass
         
         # 1. Process in chunks (streaming from disk)
@@ -67,16 +64,16 @@ class SeamlessTranslator:
         
         chunk_idx = 0
         
-        # Iterate over chunks yielded by stream_audio
         try:
-             # Just checking if file is empty first effectively requires opening it?
-             # stream_audio will just yield nothing if empty.
-             pass
+             # Estimate total size just for progress (if possible)
+             # soundfile.info gives frames
+             import soundfile as sf
+             total_frames = sf.info(str(input_file)).frames
+             total_sr = sf.info(str(input_file)).samplerate
+             total_duration = total_frames / total_sr
+             total_chunks = int(np.ceil(total_duration / CHUNK_SIZE_SEC))
         except:
-             pass
-
-        # We need to track if we got any chunks
-        got_chunks = False
+             total_chunks = 0
 
         for chunk_waveform, chunk_sample_rate in self.audio_processor.stream_audio(input_file, CHUNK_SIZE_SEC):
             got_chunks = True
@@ -132,6 +129,10 @@ class SeamlessTranslator:
             
             translated_audio_pieces.append(chunk_audio)
             translated_text_pieces.append(chunk_text)
+            
+            if progress_callback and total_chunks > 0:
+                 progress = (chunk_idx / total_chunks) * 100.0
+                 progress_callback(min(progress, 99.0))
 
         if not got_chunks:
              return {

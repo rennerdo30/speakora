@@ -55,20 +55,18 @@ class Worker:
                     input_file = Path(job.input_file)
                     output_file = Path(self.cfg.paths.output_dir) / self.cfg.paths.translated_subdir / f"{input_file.stem}_translated.wav"
                     
-                    # Simulation of segmented processing for checkpoint demonstration
-                    # In a real S2ST system, this would be chunked processing
-                    self.queue.update_job_status(job.id, JobStatus.RUNNING, progress_percent=25.0)
-                    self.queue.save_checkpoint(job.id, {"state": "processing"}, audio_position=audio_pos + 1000)
-                    
-                    self.queue.update_job_status(job.id, JobStatus.RUNNING, progress_percent=50.0)
-                    self.queue.save_checkpoint(job.id, {"state": "processing"}, audio_position=audio_pos + 2000)
-                    
+                    def progress_callback(progress: float):
+                        self.queue.update_job_status(job.id, JobStatus.RUNNING, progress_percent=progress)
+                        # Also save checkpoint occasionally? 
+                        # Ideally checkpoint logic goes here too, but start simple.
+
                     self.translator.translate_audio(
                         input_file,
                         job.target_lang,
                         job.source_lang or "auto",
                         output_file,
-                        reference_audio=input_file if self.cfg.model.expressive else None
+                        reference_audio=input_file if self.cfg.model.expressive else None,
+                        progress_callback=progress_callback
                     )
                     
                     # 5. Update status to COMPLETED
