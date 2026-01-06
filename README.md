@@ -52,6 +52,11 @@ source venv/bin/activate
 git clone https://github.com/rennerdo30/video-translate-direct.git
 cd video-translate-direct
 
+# Option 1: All-in-one startup (recommended)
+# Updates venv, builds frontend, and starts server
+start.bat
+
+# Option 2: Manual setup
 # Run setup script
 setup.bat
 
