@@ -139,6 +139,14 @@ class SeamlessTranslator:
         # 1. Convert bytes to numpy waveform (assuming 16-bit PCM)
         waveform_np = np.frombuffer(chunk, dtype=np.int16).astype(np.float32) / 32768.0
         
+        # --- Voice Activity Detection (Simple Energy-based fallback or Silero if loaded) ---
+        # For simplicity and speed in this iteration without loading heavy VAD model globally:
+        # Check Root Mean Square (RMS) amplitude
+        rms = np.sqrt(np.mean(waveform_np**2))
+        if rms < 0.01: # Threshold for silence
+            # Return silence
+            return chunk, ""
+            
         # 2. Process
         inputs = self.processor(
             audios=waveform_np,
@@ -158,8 +166,17 @@ class SeamlessTranslator:
                 src_lang=source_lang if source_lang != "auto" else None
             )
         
-        translated_audio = output[0].cpu().numpy().squeeze()
-        translated_text = self.processor.batch_decode(output[1], skip_special_tokens=True)[0]
+        # Handle output structure
+        if isinstance(output, tuple):
+             val = output[0]
+             tokens = output[1]
+        else:
+             # SeamlessM4TOutput potentially
+             val = output.waveform
+             tokens = output.sequences
+
+        translated_audio = val.cpu().numpy().squeeze()
+        translated_text = self.processor.batch_decode(tokens, skip_special_tokens=True)[0]
         
         # 3. Convert back to bytes (16-bit PCM)
         translated_audio_bytes = (translated_audio * 32768.0).astype(np.int16).tobytes()

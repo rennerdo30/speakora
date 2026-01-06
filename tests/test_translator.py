@@ -56,7 +56,11 @@ def test_translate_audio(mock_translator, tmp_path):
 def test_translate_audio_stream(mock_translator):
     translator, mock_model, mock_processor = mock_translator
     # Create a dummy chunk of 16-bit PCM audio (e.g. 10 samples = 20 bytes)
-    dummy_chunk = b'\x00\x00' * 10 
+    # Make it non-silent (> 0.01 RMS)
+    # Max amplitude is 32767. Half amplitude 16000.
+    import struct
+    # 10 samples of 16000 amplitude
+    dummy_chunk = (struct.pack('<h', 16000) * 10)
     
     # We need to ensure the mocked processor behaves correctly for the streaming call
     # The current mock fixture might need adjustment or we just assume it returns the dict
