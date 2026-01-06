@@ -66,10 +66,14 @@ class SeamlessTranslator:
         logger.info(f"Detecting language for {audio_file}...")
         
         # Load a sample of the audio (first 10 seconds for speed)
-        import soundfile as sf
-        info = sf.info(str(audio_file))
-        sample_duration = min(10.0, info.duration)
-        sample_frames = int(sample_duration * info.samplerate)
+        # Use librosa to get duration (supports more formats than soundfile)
+        import librosa
+        try:
+            duration = librosa.get_duration(path=str(audio_file))
+            sample_duration = min(10.0, duration)
+        except Exception:
+            # If we can't get duration, just use 10 seconds
+            sample_duration = 10.0
         
         waveform, sample_rate = self.audio_processor.load_audio(audio_file)
         # Take only first 10 seconds

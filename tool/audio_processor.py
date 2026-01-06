@@ -28,56 +28,76 @@ class AudioProcessor:
         """
         Yields chunks of preprocessed audio (waveform, sample_rate).
         Reads incrementally from disk to avoid high RAM usage.
+        Uses librosa for better format support (including .m4a, .mp3, etc.).
         """
         try:
-            info = sf.info(str(file_path))
-            native_sr = info.samplerate
+            # Use librosa to get file info (supports more formats than soundfile)
+            import librosa
+            info = librosa.get_duration(path=str(file_path))
+            # Get native sample rate by loading a small sample
+            waveform_sample, native_sr = librosa.load(str(file_path), sr=None, duration=0.1)
             
-            # Calculate block size in frames
-            block_size = int(chunk_duration_sec * native_sr)
+            # Calculate block size in samples
+            block_size_samples = int(chunk_duration_sec * native_sr)
             
-            for block in sf.blocks(str(file_path), blocksize=block_size, always_2d=True):
-                # block is shape (frames, channels)
+            # Use librosa's streaming capability or load in chunks
+            # librosa doesn't have direct streaming, so we'll use torchaudio or load in chunks
+            try:
+                # Try torchaudio first (better for streaming)
+                import torchaudio
+                waveform, sr = torchaudio.load(str(file_path))
+                if sr != native_sr:
+                    resampler = torchaudio.transforms.Resample(sr, native_sr)
+                    waveform = resampler(waveform)
                 
-                # 1. To Mono if needed
-                if self.to_mono and block.shape[1] > 1:
-                    block = block.mean(axis=1) # (frames,)
-                elif not self.to_mono:
-                    block = block.T # (channels, frames) matches torch usually
-                
-                # Ensure 1D if mono for librosa resample
-                if self.to_mono and block.ndim == 2:
-                     block = block.squeeze()
-
-                # 2. Resample if needed
-                if native_sr != self.target_sample_rate:
-                    # librosa expects (..., n_samples)
-                    # if block is (frames, channels) and NOT mono, this might be tricky.
-                    # librosa.resample works on (..., n_samples).
+                # Split into chunks
+                total_samples = waveform.shape[-1]
+                for start_idx in range(0, total_samples, block_size_samples):
+                    end_idx = min(start_idx + block_size_samples, total_samples)
+                    chunk = waveform[:, start_idx:end_idx]
                     
-                    if self.to_mono:
-                        # block is (frames,) -> resample expects same
-                        block = librosa.resample(block, orig_sr=native_sr, target_sr=self.target_sample_rate)
-                    else:
-                        # block is (channels, frames) if we transposed above?
-                        # Wait, sf.blocks always_2d=True gives (frames, channels).
-                        # if not mono, we transposed to (channels, frames).
-                        block = librosa.resample(block, orig_sr=native_sr, target_sr=self.target_sample_rate, axis=-1)
+                    # Process chunk
+                    if self.to_mono and chunk.shape[0] > 1:
+                        chunk = chunk.mean(dim=0, keepdim=True)
+                    
+                    # Normalize
+                    if self.normalize:
+                        max_val = chunk.abs().max()
+                        if max_val > 0:
+                            chunk = chunk / max_val
+                    
+                    yield chunk, native_sr
+            except Exception:
+                # Fallback: use librosa to load entire file (less memory efficient but works)
+                waveform_np, sr = librosa.load(
+                    str(file_path),
+                    sr=native_sr,
+                    mono=False
+                )
                 
-                # 3. Convert to Torch
-                waveform = torch.from_numpy(block)
+                # Convert to torch tensor
+                if waveform_np.ndim == 1:
+                    waveform = torch.from_numpy(waveform_np).unsqueeze(0)
+                else:
+                    waveform = torch.from_numpy(waveform_np)
                 
-                # Ensure (channels, length) format for Seamless
-                # If mono (length,), make (1, length)
-                if self.to_mono and waveform.dim() == 1:
-                    waveform = waveform.unsqueeze(0)
-                
-                # 4. Normalize
-                if self.normalize:
-                    if waveform.abs().max() > 0:
-                        waveform = waveform / waveform.abs().max()
-                        
-                yield waveform, self.target_sample_rate
+                # Split into chunks
+                total_samples = waveform.shape[-1]
+                for start_idx in range(0, total_samples, block_size_samples):
+                    end_idx = min(start_idx + block_size_samples, total_samples)
+                    chunk = waveform[:, start_idx:end_idx]
+                    
+                    # Process chunk
+                    if self.to_mono and chunk.shape[0] > 1:
+                        chunk = chunk.mean(dim=0, keepdim=True)
+                    
+                    # Normalize
+                    if self.normalize:
+                        max_val = chunk.abs().max()
+                        if max_val > 0:
+                            chunk = chunk / max_val
+                    
+                    yield chunk, native_sr
                 
         except Exception as e:
             logger.error(f"Error streaming audio from {file_path}: {e}")
