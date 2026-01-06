@@ -1,0 +1,17 @@
+[run]
+source = tool
+omit = 
+    */tests/*
+    */venv/*
+    */__pycache__/*
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+fail_under = 100
+exclude_lines =
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    uvicorn.run
+    w.start\(\)

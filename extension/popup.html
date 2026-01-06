@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>S2ST Translator</title>
+    <style>
+        body {
+            width: 300px;
+            padding: 16px;
+            font-family: 'Inter', sans-serif;
+            background: #0d0d0d;
+            color: #f3f4f6;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .logo {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border-radius: 8px;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            background: #3b82f6;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #2563eb;
+        }
+
+        .btn.stop {
+            background: #ef4444;
+        }
+
+        .btn.stop:hover {
+            background: #dc2626;
+        }
+
+        .status {
+            margin-top: 16px;
+            font-size: 0.875rem;
+            color: #9ca3af;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="logo"></div>
+        <h2>S2ST Translator</h2>
+    </div>
+
+    <button id="toggleBtn" class="btn">Start Translation</button>
+    <div id="status" class="status">Disconnected</div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
