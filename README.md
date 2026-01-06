@@ -15,6 +15,8 @@ A production-grade, state-of-the-art speech-to-speech translation (S2ST) system 
 - **Background Worker**: SQLite-backed job queue for asynchronous processing.
 - **Device Management**: Automatic GPU acceleration (CUDA/MPS) with CPU fallback.
 - **Zero-Shot Voice Preservation**: Maintain speaker identity across languages.
+- **Resource Efficient**: Smart chunking for long-form content conversion without high RAM usage.
+- **Smart Streaming**: Integrated VAD (Voice Activity Detection) to skip silence during real-time translation.
 
 ## Installation
 
