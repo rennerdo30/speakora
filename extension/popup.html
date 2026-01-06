@@ -5,46 +5,87 @@
     <title>S2ST Translator</title>
     <style>
         body {
-            width: 300px;
-            padding: 16px;
+            width: 320px;
+            padding: 20px;
             font-family: 'Inter', sans-serif;
             background: #0d0d0d;
             color: #f3f4f6;
+            margin: 0;
         }
 
         .header {
             display: flex;
             align-items: center;
             gap: 12px;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         .logo {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
             background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            border-radius: 8px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
         }
 
         h2 {
             margin: 0;
-            font-size: 1.25rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: 0.05em;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px 12px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: white;
+            font-family: inherit;
+            outline: none;
+            cursor: pointer;
         }
 
         .btn {
             width: 100%;
             padding: 12px;
-            border-radius: 8px;
+            border-radius: 10px;
             border: none;
             background: #3b82f6;
             color: white;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         .btn:hover {
             background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
         }
 
         .btn.stop {
@@ -55,23 +96,86 @@
             background: #dc2626;
         }
 
-        .status {
-            margin-top: 16px;
-            font-size: 0.875rem;
-            color: #9ca3af;
+        .status-box {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid #222;
+            font-size: 0.8125rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4b5563;
+        }
+
+        .dot.active {
+            background: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .footer {
+            margin-top: 24px;
             text-align: center;
+        }
+
+        .footer a {
+            font-size: 0.75rem;
+            color: #3b82f6;
+            text-decoration: none;
         }
     </style>
 </head>
 
 <body>
     <div class="header">
-        <div class="logo"></div>
+        <div class="logo">S2ST</div>
         <h2>S2ST Translator</h2>
     </div>
 
-    <button id="toggleBtn" class="btn">Start Translation</button>
-    <div id="status" class="status">Disconnected</div>
+    <div class="form-group">
+        <label>Target Language</label>
+        <select id="targetLang">
+            <option value="deu">German (Deutsch)</option>
+            <option value="fra">French (Français)</option>
+            <option value="spa">Spanish (Español)</option>
+            <option value="ita">Italian (Italiano)</option>
+            <option value="jpn">Japanese (日本語)</option>
+            <option value="zho">Chinese (中文)</option>
+            <option value="rus">Russian (Русский)</option>
+            <option value="kor">Korean (한국어)</option>
+            <option value="eng">English</option>
+        </select>
+    </div>
+
+    <button id="toggleBtn" class="btn">
+        <span id="btnIcon">▶</span>
+        <span id="btnText">Start Translation</span>
+    </button>
+
+    <div class="status-box">
+        <div class="status-indicator">
+            <div id="statusDot" class="dot"></div>
+            <span id="statusText">Disconnected</span>
+        </div>
+        <span id="statsInfo" style="color: #666;">v1.0.0</span>
+    </div>
+
+    <div class="footer">
+        <a href="http://localhost:5000" target="_blank">Open Web Dashboard</a>
+    </div>
 
     <script src="popup.js"></script>
 </body>

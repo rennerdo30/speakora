@@ -82,32 +82,44 @@ def create_app(cfg: Config) -> FastAPI:
         await websocket.accept()
         logger.info("WebSocket connection accepted.")
         
+        target_lang = "deu" # Default
+        
         try:
             # Load model for streaming
             translator.load_model()
             
             while True:
-                # Receive audio chunk as bytes
-                data = await websocket.receive_bytes()
+                # Can receive text (json) or bytes
+                message = await websocket.receive()
                 
-                # In a real streaming scenario, we'd feed this to a streaming decoder
-                # Here we'll simulate processing a chunk
-                try:
-                    # For now, we'll just mock the return
-                    # In real: translated_chunk = translator.translate_audio_stream(data, ...)
-                    await websocket.send_json({"status": "processing", "chunk_size": len(data)})
-                    
-                    # Simulate some work
-                    await asyncio.sleep(0.1)
-                    
-                    # Send back a heartbeat or dummy data
-                    await websocket.send_text("ACK")
-                except Exception as e:
-                    logger.error(f"Streaming error: {e}")
-                    await websocket.send_json({"error": str(e)})
+                if "text" in message:
+                    import json
+                    data = json.loads(message["text"])
+                    if data.get("type") == "init":
+                        target_lang = data.get("target_lang", "deu")
+                        logger.info(f"Streaming target language set to: {target_lang}")
+                        continue
+                
+                if "bytes" in message:
+                    data = message["bytes"]
+                    try:
+                        # Translate chunk
+                        translated_bytes, translated_text = translator.translate_audio_stream(
+                            data, 
+                            target_lang=target_lang
+                        )
+                        
+                        await websocket.send_json({
+                            "status": "success", 
+                            "text": translated_text
+                        })
+                        
+                    except Exception as e:
+                        logger.error(f"Streaming translation error: {e}")
+                        await websocket.send_json({"error": str(e)})
                     
         except Exception as e:
-            logger.info(f"WebSocket closed: {e}")
+            logger.info(f"WebSocket closed or errored: {e}")
         finally:
             logger.info("WebSocket connection finished.")
 

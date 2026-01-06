@@ -1,17 +1,33 @@
 const toggleBtn = document.getElementById('toggleBtn');
-const statusDiv = document.getElementById('status');
+const btnText = document.getElementById('btnText');
+const btnIcon = document.getElementById('btnIcon');
+const statusText = document.getElementById('statusText');
+const statusDot = document.getElementById('statusDot');
+const targetLangSelect = document.getElementById('targetLang');
 
 let isRunning = false;
 
-// Check initial status
-chrome.storage.local.get(['isTranslating'], (result) => {
+// Load persisted state
+chrome.storage.local.get(['isTranslating', 'targetLang'], (result) => {
     isRunning = !!result.isTranslating;
+    if (result.targetLang) {
+        targetLangSelect.value = result.targetLang;
+    }
     updateUI();
+});
+
+// Save language preference on change
+targetLangSelect.addEventListener('change', () => {
+    chrome.storage.local.set({ targetLang: targetLangSelect.value });
 });
 
 toggleBtn.addEventListener('click', () => {
     if (!isRunning) {
-        chrome.runtime.sendMessage({ action: "start_translation" }, (response) => {
+        const targetLang = targetLangSelect.value;
+        chrome.runtime.sendMessage({
+            action: "start_translation",
+            targetLang: targetLang
+        }, (response) => {
             isRunning = true;
             chrome.storage.local.set({ isTranslating: true });
             updateUI();
@@ -27,16 +43,30 @@ toggleBtn.addEventListener('click', () => {
 
 chrome.runtime.onMessage.addListener((message) => {
     if (message.action === "status_update") {
-        statusDiv.textContent = message.status.charAt(0).toUpperCase() + message.status.slice(1);
-        if (message.status === "disconnected") {
-            isRunning = false;
-            chrome.storage.local.set({ isTranslating: false });
-            updateUI();
+        statusText.textContent = message.status.charAt(0).toUpperCase() + message.status.slice(1);
+        if (message.status === "connected") {
+            statusDot.className = "dot active";
+        } else {
+            statusDot.className = "dot";
+            if (message.status === "disconnected") {
+                isRunning = false;
+                chrome.storage.local.set({ isTranslating: false });
+                updateUI();
+            }
         }
     }
 });
 
 function updateUI() {
-    toggleBtn.textContent = isRunning ? "Stop Translation" : "Start Translation";
-    toggleBtn.className = isRunning ? "btn stop" : "btn";
+    if (isRunning) {
+        btnText.textContent = "Stop Translation";
+        btnIcon.textContent = "■";
+        toggleBtn.className = "btn stop";
+        targetLangSelect.disabled = true;
+    } else {
+        btnText.textContent = "Start Translation";
+        btnIcon.textContent = "▶";
+        toggleBtn.className = "btn";
+        targetLangSelect.disabled = false;
+    }
 }
