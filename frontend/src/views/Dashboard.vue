@@ -1,3 +1,4 @@
+<script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue'
 import { useJobStore } from '../stores/jobStore'
 import { useSystemStore } from '../stores/systemStore'
