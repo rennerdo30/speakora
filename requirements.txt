@@ -12,5 +12,7 @@ sqlalchemy >= 2.0.0
 fastapi >= 0.104.0
 uvicorn >= 0.24.0
 websockets >= 12.0.0
-silero-vad >= 4.0.0
 psutil >= 5.9.0
+
+# Optional: silero-vad for advanced VAD (not required - simple RMS-based VAD is used by default)
+# silero-vad >= 4.0.0  # Requires onnxruntime which may not be available on all platforms

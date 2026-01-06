@@ -37,9 +37,12 @@ pip install --upgrade pip setuptools wheel
 echo "📥 Installing dependencies..."
 pip install -r requirements.txt
 
-# Note: fairseq2 is not required - transformers includes SeamlessM4T v2
-# If you need fairseq2 for advanced features, install it separately:
+# Optional dependencies (commented out in requirements.txt):
+# - fairseq2: Not required - transformers includes SeamlessM4T v2
+# - silero-vad: Not required - simple RMS-based VAD is used by default
+# If you need these, install separately:
 # pip install fairseq2  # May require fairseq2n which has platform-specific builds
+# pip install silero-vad  # Requires onnxruntime which may not be available on all platforms
 
 # Install dev dependencies if available
 if [ -f "requirements-dev.txt" ]; then
