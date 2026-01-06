@@ -55,9 +55,13 @@ class AudioProcessor:
         try:
             # Use librosa to get file info (supports more formats than soundfile)
             import librosa
-            info = librosa.get_duration(path=str(file_path))
-            # Get native sample rate by loading a small sample
-            waveform_sample, native_sr = librosa.load(str(file_path), sr=None, duration=0.1)
+            # Suppress deprecation warnings from librosa when using audioread fallback
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=FutureWarning, module='librosa')
+                warnings.filterwarnings('ignore', category=UserWarning, module='librosa')
+                info = librosa.get_duration(path=str(file_path))
+                # Get native sample rate by loading a small sample
+                waveform_sample, native_sr = librosa.load(str(file_path), sr=None, duration=0.1)
             
             # Calculate block size in samples
             block_size_samples = int(chunk_duration_sec * native_sr)
