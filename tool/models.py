@@ -12,13 +12,18 @@ class ModelManager:
         model_size: str = "large",
         device: str = "auto",
         dtype: str = "float16",
-        cache_dir: Optional[str] = None
+        cache_dir: Optional[str] = None,
+        expressive: bool = False
     ):
         self.model_size = model_size
         self.device = device
         self.dtype = dtype
         self.cache_dir = cache_dir
+        self.expressive = expressive
         
+        # For expressive mode, we use the standard model but with special handling
+        # SeamlessM4T v2 doesn't have a separate expressive model, but we can use
+        # reference audio to preserve voice characteristics
         self.model_name = f"facebook/seamless-m4t-v2-{model_size}"
         self.model: Optional[SeamlessM4Tv2Model] = None
         self.processor: Optional[AutoProcessor] = None

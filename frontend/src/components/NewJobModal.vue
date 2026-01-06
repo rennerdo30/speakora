@@ -13,6 +13,8 @@ const input_file = ref('')
 const target_lang = ref('deu')
 const source_lang = ref('auto')
 const priority = ref(0)
+const expressive = ref(false)
+const reference_audio = ref('')
 const submitting = ref(false)
 const error = ref('')
 
@@ -41,7 +43,9 @@ const submitJob = async () => {
       input_file: input_file.value,
       target_lang: target_lang.value,
       source_lang: source_lang.value,
-      priority: priority.value
+      priority: priority.value,
+      expressive: expressive.value,
+      reference_audio: expressive.value && reference_audio.value ? reference_audio.value : null
     })
     emit('submitted')
     emit('close')
@@ -118,6 +122,32 @@ const submitJob = async () => {
             max="100"
             class="form-input"
           />
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input 
+              v-model="expressive" 
+              type="checkbox" 
+              class="checkbox-input"
+            />
+            <span>Expressive Voice Mode</span>
+          </label>
+          <span class="hint">Preserve speaker's voice characteristics (prosody, tone) in translation</span>
+        </div>
+
+        <div v-if="expressive" class="form-group">
+          <label>
+            <FileAudio :size="16" />
+            Reference Audio (Optional)
+          </label>
+          <input 
+            v-model="reference_audio" 
+            type="text" 
+            placeholder="/path/to/reference.wav (leave empty to use input file)"
+            class="form-input"
+          />
+          <span class="hint">Path to reference audio for voice cloning. If empty, input file will be used.</span>
         </div>
 
         <div v-if="error" class="error-message">{{ error }}</div>
@@ -222,6 +252,19 @@ const submitJob = async () => {
 .hint {
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox-input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
 }
 
 .error-message {

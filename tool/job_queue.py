@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Any
 import json
 from sqlalchemy import (
-    create_engine, Column, String, Float, DateTime, Integer, Text, ForeignKey, PickleType
+    create_engine, Column, String, Float, DateTime, Integer, Text, ForeignKey, PickleType, Boolean
 )
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 import uuid
@@ -36,6 +36,8 @@ class Job(Base):
     progress_percent = Column(Float, default=0.0)
     processing_time_seconds = Column(Float, nullable=True)
     priority = Column(Integer, default=0)
+    expressive = Column(Boolean, default=False)
+    reference_audio = Column(Text, nullable=True)
 
     checkpoints = relationship("Checkpoint", back_populates="job", cascade="all, delete-orphan")
 
@@ -59,7 +61,15 @@ class JobQueue:
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
 
-    def enqueue(self, input_file: str, target_lang: str, source_lang: Optional[str] = "auto", priority: int = 0) -> str:
+    def enqueue(
+        self, 
+        input_file: str, 
+        target_lang: str, 
+        source_lang: Optional[str] = "auto", 
+        priority: int = 0,
+        expressive: bool = False,
+        reference_audio: Optional[str] = None
+    ) -> str:
         session = self.Session()
         job_id = str(uuid.uuid4())
         job = Job(
@@ -67,7 +77,9 @@ class JobQueue:
             input_file=input_file,
             target_lang=target_lang,
             source_lang=source_lang,
-            priority=priority
+            priority=priority,
+            expressive=expressive,
+            reference_audio=reference_audio
         )
         session.add(job)
         session.commit()

@@ -19,6 +19,8 @@ class JobCreate(BaseModel):
     target_lang: str
     source_lang: str = "auto"
     priority: int = 0
+    expressive: bool = False
+    reference_audio: Optional[str] = None
 
 def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="S2ST Translator API")
@@ -110,11 +112,20 @@ def create_app(cfg: Config) -> FastAPI:
         if not input_path.exists():
             raise HTTPException(status_code=400, detail=f"Input file does not exist: {job_data.input_file}")
 
+        # Validate reference audio if provided
+        reference_audio_path = None
+        if job_data.reference_audio:
+            reference_audio_path = Path(job_data.reference_audio)
+            if not reference_audio_path.exists():
+                raise HTTPException(status_code=400, detail=f"Reference audio file does not exist: {job_data.reference_audio}")
+
         job_id = queue.enqueue(
             job_data.input_file, 
             job_data.target_lang, 
             job_data.source_lang, 
-            job_data.priority
+            job_data.priority,
+            expressive=job_data.expressive,
+            reference_audio=job_data.reference_audio
         )
         return {"job_id": job_id}
 

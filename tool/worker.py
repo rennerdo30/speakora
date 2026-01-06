@@ -84,12 +84,21 @@ class Worker:
                             except Exception as e:
                                 logger.warning(f"[{self.worker_id}] Failed to save checkpoint: {e}")
 
+                    # Determine reference audio for expressive mode
+                    reference_audio = None
+                    if hasattr(job, 'expressive') and job.expressive:
+                        if hasattr(job, 'reference_audio') and job.reference_audio:
+                            reference_audio = Path(job.reference_audio)
+                        else:
+                            # Use input file as reference if no separate reference provided
+                            reference_audio = input_file
+                    
                     self.translator.translate_audio(
                         input_file,
                         job.target_lang,
                         job.source_lang or "auto",
                         output_file,
-                        reference_audio=input_file if self.cfg.model.expressive else None,
+                        reference_audio=reference_audio,
                         progress_callback=progress_callback
                     )
                     
