@@ -75,6 +75,9 @@ class AdvancedSettings(BaseModel):
     use_torchscript: bool = False
     seed: int = 42
 
+class SecuritySettings(BaseModel):
+    api_key: Optional[str] = None
+
 class Config(BaseModel):
     model: ModelSettings = ModelSettings()
     translation: TranslationSettings = TranslationSettings()
@@ -83,6 +86,7 @@ class Config(BaseModel):
     logging: LoggingSettings = LoggingSettings()
     processing: ProcessingSettings = ProcessingSettings()
     advanced: AdvancedSettings = AdvancedSettings()
+    security: SecuritySettings = SecuritySettings()
 
 def load_config(config_path: Optional[Path] = None) -> Config:
     """Load configuration from YAML file and environment variables."""
@@ -103,5 +107,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         config_dict.setdefault("paths", {})["output_dir"] = os.getenv("OUTPUT_DIR")
     if os.getenv("LOG_LEVEL"):
         config_dict.setdefault("logging", {})["level"] = os.getenv("LOG_LEVEL")
+    if os.getenv("SEAMLESS_API_KEY"):
+        config_dict.setdefault("security", {})["api_key"] = os.getenv("SEAMLESS_API_KEY")
 
     return Config(**config_dict)

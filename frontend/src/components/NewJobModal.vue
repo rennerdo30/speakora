@@ -156,7 +156,9 @@ const submitJob = async () => {
 .modal-content {
   width: 500px;
   max-width: 95vw;
+  max-height: 90vh;
   padding: 32px;
+  overflow-y: auto;
 }
 
 .modal-header {
@@ -241,5 +243,64 @@ const submitJob = async () => {
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .modal-content {
+    width: 90vw;
+    padding: 24px;
+  }
+  
+  .modal-header {
+    margin-bottom: 20px;
+  }
+  
+  .modal-header h2 {
+    font-size: 1.25rem;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .form-group {
+    margin-bottom: 16px;
+  }
+  
+  .modal-footer {
+    flex-direction: column-reverse;
+    margin-top: 24px;
+  }
+  
+  .modal-footer .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-content {
+    width: 95vw;
+    padding: 16px;
+    max-height: 95vh;
+  }
+  
+  .modal-header h2 {
+    font-size: 1.125rem;
+  }
+  
+  .form-group label {
+    font-size: 0.8125rem;
+  }
+  
+  .form-input {
+    padding: 8px 12px;
+    font-size: 0.875rem;
+  }
+  
+  .hint {
+    font-size: 0.6875rem;
+  }
 }
 </style>

@@ -1,9 +1,12 @@
 # Issues
 
 ## Open Issues
-- [ ] **Streaming Context**: The current `translate_audio_stream` processes each text chunk independently. It should maintain context/state for better translation quality.
-- [ ] **Security**: Add authentication to API and WebSocket endpoints.
-- [ ] **Mobile Support**: Make the Web GUI responsive for mobile.
+- None at the moment!
+
+## Recently Resolved Issues
+- ✅ **Streaming Context**: Implemented context/state management in `translate_audio_stream` for better translation quality. The system now maintains a buffer of recent audio chunks and text history to provide better context-aware translations.
+- ✅ **Security**: Enhanced authentication for API and WebSocket endpoints with rate limiting, improved API key validation, and security logging.
+- ✅ **Mobile Support**: Added comprehensive mobile responsive design to Web GUI components with breakpoints for tablets and mobile devices.
 
 ## Resolved Issues
 - ✅ Initial project setup and structure

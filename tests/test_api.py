@@ -127,3 +127,73 @@ def test_config_endpoints(client):
     assert response.status_code == 200
     assert response.json()["model"]["size"] == "medium"
 
+def test_auth_middleware(test_config, tmp_path):
+    test_config.security.api_key = "secret_key"
+    app = create_app(test_config)
+    client = TestClient(app)
+    
+    # Without header
+    response = client.get("/api/jobs")
+    assert response.status_code == 401
+    
+    # With wrong header
+    response = client.get("/api/jobs", headers={"X-API-KEY": "wrong"})
+    assert response.status_code == 401
+    
+    # With correct header
+    with patch("tool.api.JobQueue.list_jobs", return_value=[]):
+        response = client.get("/api/jobs", headers={"X-API-KEY": "secret_key"})
+        assert response.status_code == 200
+
+    # WebSocket Logic
+    from starlette.websockets import WebSocketDisconnect
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with client.websocket_connect("/api/ws/translate?key=wrong") as websocket:
+            pass
+    assert excinfo.value.code == 1008
+    
+    # Recreate app to clear settings or use clean fixture
+    test_config.security.api_key = None
+
+def test_rate_limiting(test_config):
+    """Test that rate limiting works correctly."""
+    app = create_app(test_config)
+    client = TestClient(app)
+    
+    # Make many requests quickly
+    responses = []
+    for i in range(105):  # Exceed the limit of 100
+        with patch("tool.api.JobQueue.list_jobs", return_value=[]):
+            response = client.get("/api/jobs")
+            responses.append(response.status_code)
+    
+    # Should have some 429 responses after limit exceeded
+    # Note: Rate limiting is per IP, and TestClient might use same IP
+    # So we expect some 429s in the later requests
+    assert 429 in responses or len([r for r in responses if r == 200]) <= 100
+
+def test_websocket_context_reset(test_config):
+    """Test WebSocket context reset functionality."""
+    test_config.security.api_key = None  # Disable auth for simpler test
+    app = create_app(test_config)
+    client = TestClient(app)
+    
+    with patch("tool.api.SeamlessTranslator") as mock_translator_class:
+        mock_translator = MagicMock()
+        mock_translator_class.return_value = mock_translator
+        mock_translator.load_model.return_value = None
+        
+        with client.websocket_connect("/api/ws/translate") as websocket:
+            # Send init message
+            websocket.send_json({"type": "init", "target_lang": "deu", "source_lang": "eng"})
+            
+            # Send reset message
+            websocket.send_json({"type": "reset"})
+            
+            # Should receive context_reset response
+            response = websocket.receive_json()
+            assert response["status"] == "context_reset"
+            assert mock_translator.reset_streaming_context.called
+    
+    test_config.security.api_key = None
+

@@ -74,3 +74,81 @@ def test_translate_audio_stream(mock_translator):
     assert result_text == "mocked translation"
     assert mock_model.generate.called
     assert mock_processor.called
+
+def test_translate_audio_stream_context(mock_translator):
+    """Test that streaming translation maintains context across chunks."""
+    translator, mock_model, mock_processor = mock_translator
+    import struct
+    
+    # Create multiple chunks
+    chunk1 = struct.pack('<h', 16000) * 100  # 100 samples
+    chunk2 = struct.pack('<h', 16000) * 100
+    chunk3 = struct.pack('<h', 16000) * 100
+    
+    # First chunk - no context yet
+    result1, text1 = translator.translate_audio_stream(chunk1, "deu", use_context=True)
+    assert len(translator._streaming_context['audio_buffer']) == 1
+    
+    # Second chunk - should have context from first
+    result2, text2 = translator.translate_audio_stream(chunk2, "deu", use_context=True)
+    assert len(translator._streaming_context['audio_buffer']) == 2
+    
+    # Third chunk - should maintain buffer size limit
+    result3, text3 = translator.translate_audio_stream(chunk3, "deu", use_context=True)
+    # Buffer should not exceed max_buffer_size (5)
+    assert len(translator._streaming_context['audio_buffer']) <= 5
+    
+    # Verify all chunks were processed
+    assert mock_model.generate.call_count == 3
+
+def test_translate_audio_stream_context_reset_on_language_change(mock_translator):
+    """Test that context resets when language changes."""
+    translator, mock_model, mock_processor = mock_translator
+    import struct
+    
+    chunk = struct.pack('<h', 16000) * 100
+    
+    # Process with one language
+    translator.translate_audio_stream(chunk, "deu", use_context=True)
+    assert len(translator._streaming_context['audio_buffer']) == 1
+    assert translator._streaming_context['last_target_lang'] == "deu"
+    
+    # Change language - should reset context
+    translator.translate_audio_stream(chunk, "fra", use_context=True)
+    assert len(translator._streaming_context['audio_buffer']) == 1  # Reset, then new chunk added
+    assert translator._streaming_context['last_target_lang'] == "fra"
+
+def test_reset_streaming_context(mock_translator):
+    """Test that reset_streaming_context clears all context."""
+    translator, mock_model, mock_processor = mock_translator
+    import struct
+    
+    chunk = struct.pack('<h', 16000) * 100
+    
+    # Add some context
+    translator.translate_audio_stream(chunk, "deu", use_context=True)
+    translator.translate_audio_stream(chunk, "deu", use_context=True)
+    assert len(translator._streaming_context['audio_buffer']) == 2
+    
+    # Reset
+    translator.reset_streaming_context()
+    assert len(translator._streaming_context['audio_buffer']) == 0
+    assert len(translator._streaming_context['text_history']) == 0
+    assert translator._streaming_context['last_target_lang'] is None
+    assert translator._streaming_context['last_source_lang'] is None
+
+def test_translate_audio_stream_silence(mock_translator):
+    """Test that silence chunks are handled correctly."""
+    translator, mock_model, mock_processor = mock_translator
+    import struct
+    
+    # Create a silent chunk (very low amplitude)
+    silent_chunk = struct.pack('<h', 10) * 100  # Very quiet
+    
+    result_audio, result_text = translator.translate_audio_stream(silent_chunk, "deu")
+    
+    # Should return silence and empty text, but not call model
+    assert isinstance(result_audio, bytes)
+    assert result_text == ""
+    # Model should not be called for silence
+    # (Note: This depends on RMS threshold, which is 0.01)

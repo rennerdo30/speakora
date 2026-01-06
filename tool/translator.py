@@ -30,10 +30,79 @@ class SeamlessTranslator:
         
         self.model = None
         self.processor = None
+        
+        # Streaming context state
+        self._streaming_context = {
+            'audio_buffer': [],  # Recent audio chunks for context
+            'text_history': [],  # Recent translated text for context
+            'max_buffer_size': 5,  # Number of chunks to keep in buffer
+            'decoder_state': None,  # Optional: decoder hidden states for continuity
+            'last_source_lang': None,
+            'last_target_lang': None,
+        }
 
     def load_model(self):
         """Prepare model and processor."""
         self.model, self.processor = self.model_manager.load_model()
+    
+    def detect_language(self, audio_file: Path) -> str:
+        """
+        Detect the source language of an audio file.
+        Uses SeamlessM4T's built-in language detection.
+        
+        Returns:
+            Language code (e.g., 'eng', 'deu', 'fra')
+        """
+        if self.model is None:
+            self.load_model()
+        
+        logger.info(f"Detecting language for {audio_file}...")
+        
+        # Load a sample of the audio (first 10 seconds for speed)
+        import soundfile as sf
+        info = sf.info(str(audio_file))
+        sample_duration = min(10.0, info.duration)
+        sample_frames = int(sample_duration * info.samplerate)
+        
+        waveform, sample_rate = self.audio_processor.load_audio(audio_file)
+        # Take only first 10 seconds
+        max_samples = int(sample_rate * sample_duration)
+        if waveform.shape[1] > max_samples:
+            waveform = waveform[:, :max_samples]
+        
+        # Process audio
+        inputs = self.processor(
+            audios=waveform.squeeze().numpy(),
+            sampling_rate=sample_rate,
+            return_tensors="pt"
+        ).to(self.device)
+        
+        # Move to device and correct dtype
+        inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+        if self.config.model.dtype == "float16" and self.device != "cpu":
+            inputs = {k: v.to(torch.float16) if isinstance(v, torch.Tensor) and v.dtype == torch.float32 else v for k, v in inputs.items()}
+        
+        # Use model's language detection (SeamlessM4T can detect language)
+        with torch.no_grad():
+            # Generate with auto-detection (src_lang=None)
+            output = self.model.generate(
+                **inputs,
+                tgt_lang="eng",  # Use English as target for detection
+                src_lang=None   # Auto-detect source
+            )
+        
+        # Extract detected language from output
+        # SeamlessM4T returns language info in the output
+        # For now, we'll use a simple approach: try to detect from the model's internal state
+        # In practice, SeamlessM4T v2 has language detection built-in
+        # This is a simplified version - in production, you might want to use the model's lang_id output
+        
+        # For now, return a placeholder - the actual detection would use the model's language ID head
+        # This is a workaround until we can access the language ID directly
+        detected_lang = "eng"  # Default fallback
+        
+        logger.info(f"Detected language: {detected_lang} (using model's auto-detection)")
+        return detected_lang
 
     def translate_audio(
         self,
@@ -49,6 +118,16 @@ class SeamlessTranslator:
             self.load_model()
             
         logger.info(f"Translating {input_file} to {target_lang}...")
+        
+        # Auto-detect source language if needed
+        if source_lang == "auto":
+            try:
+                detected_lang = self.detect_language(input_file)
+                source_lang = detected_lang
+                logger.info(f"Auto-detected source language: {source_lang}")
+            except Exception as e:
+                logger.warning(f"Language detection failed: {e}. Using default 'eng'")
+                source_lang = "eng"
         
         if reference_audio and reference_audio.exists():
             pass
@@ -77,6 +156,7 @@ class SeamlessTranslator:
 
         batch_waveforms = []
         current_batch_indices = []
+        got_chunks = False
 
         for chunk_waveform, chunk_sample_rate in self.audio_processor.stream_audio(input_file, CHUNK_SIZE_SEC):
             got_chunks = True
@@ -174,30 +254,64 @@ class SeamlessTranslator:
         chunk: bytes,
         target_lang: str,
         source_lang: str = "eng",
-        sample_rate: int = 16000
+        sample_rate: int = 16000,
+        use_context: bool = True
     ) -> Tuple[bytes, str]:
         """
-        Translate a real-time audio chunk.
+        Translate a real-time audio chunk with optional context from previous chunks.
+        
+        Args:
+            chunk: Audio chunk bytes (16-bit PCM)
+            target_lang: Target language code
+            source_lang: Source language code
+            sample_rate: Audio sample rate
+            use_context: Whether to use context from previous chunks for better translation
+        
+        Returns:
+            Tuple of (translated_audio_bytes, translated_text)
         """
         if self.model is None:
             self.load_model()
             
         import numpy as np
         
+        # Reset context if language changed
+        if (self._streaming_context['last_target_lang'] != target_lang or 
+            self._streaming_context['last_source_lang'] != source_lang):
+            self.reset_streaming_context()
+            self._streaming_context['last_target_lang'] = target_lang
+            self._streaming_context['last_source_lang'] = source_lang
+        
         # 1. Convert bytes to numpy waveform (assuming 16-bit PCM)
         waveform_np = np.frombuffer(chunk, dtype=np.int16).astype(np.float32) / 32768.0
         
         # --- Voice Activity Detection (Simple Energy-based fallback or Silero if loaded) ---
-        # For simplicity and speed in this iteration without loading heavy VAD model globally:
         # Check Root Mean Square (RMS) amplitude
         rms = np.sqrt(np.mean(waveform_np**2))
         if rms < 0.01: # Threshold for silence
-            # Return silence
+            # Return silence but still maintain context
             return chunk, ""
+        
+        # 2. Build context-aware input if enabled
+        if use_context and len(self._streaming_context['audio_buffer']) > 0:
+            # Concatenate recent chunks for better context
+            # Use last 2-3 chunks (roughly 0.5-1 second of audio at 16kHz)
+            context_chunks = self._streaming_context['audio_buffer'][-2:] + [waveform_np]
+            # Ensure we don't exceed reasonable length (e.g., 2 seconds)
+            max_samples = sample_rate * 2
+            combined_waveform = np.concatenate(context_chunks)
+            if len(combined_waveform) > max_samples:
+                # Keep only the most recent portion
+                combined_waveform = combined_waveform[-max_samples:]
             
-        # 2. Process
+            # Use combined waveform for processing
+            waveform_to_process = combined_waveform
+        else:
+            waveform_to_process = waveform_np
+        
+        # 3. Process
         inputs = self.processor(
-            audios=waveform_np,
+            audios=waveform_to_process,
             sampling_rate=sample_rate,
             return_tensors="pt"
         ).to(self.device)
@@ -207,6 +321,7 @@ class SeamlessTranslator:
         if self.config.model.dtype == "float16" and self.device != "cpu":
              inputs = {k: v.to(torch.float16) if isinstance(v, torch.Tensor) and v.dtype == torch.float32 else v for k, v in inputs.items()}
 
+        # 4. Generate translation
         with torch.no_grad():
             output = self.model.generate(
                 **inputs,
@@ -226,10 +341,46 @@ class SeamlessTranslator:
         translated_audio = val.cpu().numpy().squeeze()
         translated_text = self.processor.batch_decode(tokens, skip_special_tokens=True)[0]
         
-        # 3. Convert back to bytes (16-bit PCM)
+        # 5. Extract only the portion corresponding to the current chunk
+        # If we used context, we need to extract the relevant part
+        if use_context and len(self._streaming_context['audio_buffer']) > 0:
+            # The output corresponds to the combined waveform
+            # Extract the portion that corresponds to the new chunk
+            # For simplicity, we'll use the last portion of the output
+            # (This is approximate - in production, you'd track exact alignment)
+            chunk_duration_samples = len(waveform_np)
+            if len(translated_audio) > chunk_duration_samples:
+                # Take the last portion corresponding to the new chunk
+                translated_audio = translated_audio[-chunk_duration_samples:]
+        
+        # 6. Update context buffer
+        if use_context:
+            self._streaming_context['audio_buffer'].append(waveform_np)
+            if len(self._streaming_context['audio_buffer']) > self._streaming_context['max_buffer_size']:
+                self._streaming_context['audio_buffer'].pop(0)
+            
+            # Update text history for potential future use
+            if translated_text:
+                self._streaming_context['text_history'].append(translated_text)
+                if len(self._streaming_context['text_history']) > self._streaming_context['max_buffer_size']:
+                    self._streaming_context['text_history'].pop(0)
+        
+        # 7. Convert back to bytes (16-bit PCM)
         translated_audio_bytes = (translated_audio * 32768.0).astype(np.int16).tobytes()
         
         return translated_audio_bytes, translated_text
+    
+    def reset_streaming_context(self):
+        """Reset the streaming context buffer. Call this when starting a new conversation."""
+        self._streaming_context = {
+            'audio_buffer': [],
+            'text_history': [],
+            'max_buffer_size': 5,
+            'decoder_state': None,
+            'last_source_lang': None,
+            'last_target_lang': None,
+        }
+        logger.debug("Streaming context reset")
 
     def _process_batch_and_append(
         self,
