@@ -42,9 +42,12 @@ class ModelManager:
             torch_dtype = torch.bfloat16
 
         try:
+            # Use slow tokenizer (SentencePiece) instead of fast tokenizer (tiktoken)
+            # SeamlessM4T v2 uses SentencePiece format which doesn't convert well to tiktoken
             self.processor = AutoProcessor.from_pretrained(
                 self.model_name,
-                cache_dir=self.cache_dir
+                cache_dir=self.cache_dir,
+                use_fast=False  # Force use of SentencePiece tokenizer
             )
             self.model = SeamlessM4Tv2Model.from_pretrained(
                 self.model_name,
