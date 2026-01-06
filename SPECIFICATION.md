@@ -287,7 +287,7 @@ espeak-ng >= 1.50                 # Phoneme synthesis
 | **translator.py** | Core S2ST logic | SeamlessTranslator class, translate_audio(), run() |
 | **config.py** | Configuration management | load_config(), Config dataclass, validation |
 | **device_manager.py** | GPU/CPU detection | get_optimal_device(), get_device_info() |
-| **audio_processor.py** | Audio I/O and preprocessing | AudioProcessor class, load_audio(), save_audio() |
+| **audio_processor.py** | Audio I/O and preprocessing | AudioProcessor class, load_audio(), save_audio(), stream_audio() |
 | **models.py** | Model loading & caching | ModelManager class, load_model(), cache_model() |
 | **logger.py** | Centralized logging | setup_logger(), structured logging, rotation |
 | **job_queue.py** | Job queue management | JobQueue class, enqueue(), pause(), resume(), checkpoint() |

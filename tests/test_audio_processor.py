@@ -49,7 +49,23 @@ def test_load_audio_error():
     with pytest.raises(Exception):
         processor.load_audio("non_existent.wav")
 
-def test_save_audio_error():
-    processor = AudioProcessor()
     with pytest.raises(Exception):
         processor.save_audio(torch.randn(1, 100), "")
+
+def test_stream_audio(sample_audio_file):
+    processor = AudioProcessor(target_sample_rate=16000)
+    
+    # 1 second audio at 44.1kHz.
+    # We request 0.5s chunks.
+    # Should get roughly 2 chunks appropriately resampled to 16kHz.
+    
+    chunks = list(processor.stream_audio(sample_audio_file, chunk_duration_sec=0.5))
+    
+    assert len(chunks) == 2
+    
+    for wav, sr in chunks:
+        assert sr == 16000
+        assert wav.dim() == 2
+        assert wav.shape[0] == 1 # Mono
+        # 0.5 sec * 16000 = 8000 samples
+        assert 7900 < wav.shape[1] < 8100 # Approx match due to resampling/rounding
