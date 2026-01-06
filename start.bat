@@ -53,16 +53,33 @@ if errorlevel 1 (
         echo ✅ Frontend dependencies updated
         echo.
         
-        REM Build frontend
+        REM Build frontend (skip type checking if vue-tsc fails)
         echo 🔨 Building frontend...
         call npm run build
-        
-        if exist "dist" (
-            echo ✅ Frontend built successfully
-            set FRONTEND_BUILT=true
+        if errorlevel 1 (
+            echo ⚠️  Frontend build failed, trying without type checking...
+            REM Try building without type checking
+            call npx vite build
+            if errorlevel 1 (
+                echo ⚠️  Frontend build failed, but continuing with server...
+                set FRONTEND_BUILT=false
+            ) else (
+                if exist "dist" (
+                    echo ✅ Frontend built successfully (without type checking)
+                    set FRONTEND_BUILT=true
+                ) else (
+                    echo ⚠️  Frontend build failed
+                    set FRONTEND_BUILT=false
+                )
+            )
         ) else (
-            echo ⚠️  Frontend build may have failed, but continuing...
-            set FRONTEND_BUILT=false
+            if exist "dist" (
+                echo ✅ Frontend built successfully
+                set FRONTEND_BUILT=true
+            ) else (
+                echo ⚠️  Frontend build completed but dist directory not found
+                set FRONTEND_BUILT=false
+            )
         )
         
         cd ..
