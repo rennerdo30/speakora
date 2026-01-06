@@ -118,8 +118,10 @@ npm run build</code></pre>
 
     @app.middleware("http")
     async def security_middleware(request: Request, call_next):
-        # Skip security for docs and static files
-        if request.url.path in ["/docs", "/openapi.json", "/", "/favicon.ico"]:
+        # Skip security for docs, static files, and frontend routes
+        if (request.url.path in ["/docs", "/openapi.json", "/", "/favicon.ico"] or
+            request.url.path.startswith("/assets/") or
+            not request.url.path.startswith("/api/")):
             return await call_next(request)
         
         # Rate limiting
