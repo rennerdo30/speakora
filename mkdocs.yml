@@ -1,0 +1,122 @@
+site_name: Speakora
+site_description: Speech-to-Speech Translation Made Simple - Powered by Meta's SeamlessM4T v2
+site_url: https://rennerdo30.github.io/speakora
+repo_url: https://github.com/rennerdo30/speakora
+repo_name: rennerdo30/speakora
+edit_uri: edit/main/docs/
+
+# Theme Configuration - Luminous Void Theme
+theme:
+  name: material
+  custom_dir: overrides
+  language: en
+
+  # Color palette with toggle (dark mode default, matching renner.dev)
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+  # Font configuration
+  font:
+    text: Inter
+    code: Fira Code
+
+  # Features
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - header.autohide
+
+  # Icons
+  icon:
+    logo: material/rocket-launch
+    repo: fontawesome/brands/github
+
+  # Favicon
+  favicon: assets/images/favicon.png
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Configuration: getting-started/configuration.md
+  - User Guide:
+      - CLI Usage: user-guide/cli.md
+      - Web Dashboard: user-guide/dashboard.md
+      - YouTube Integration: user-guide/youtube.md
+      - Video Processing: user-guide/video.md
+      - Batch Processing: user-guide/batch.md
+  - API Reference:
+      - REST API: api/rest.md
+      - WebSocket API: api/websocket.md
+  - Deployment:
+      - Docker: deployment/docker.md
+      - RunPod: deployment/runpod.md
+  - Development:
+      - Architecture: development/architecture.md
+      - Contributing: development/contributing.md
+  - FAQ: faq.md
+
+# Extra CSS and JavaScript
+extra_css:
+  - assets/stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/rennerdo30/speakora
