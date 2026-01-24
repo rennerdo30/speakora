@@ -1,0 +1,160 @@
+---
+title: "Installation"
+description: "Documentation for Installation"
+---
+
+# Installation
+
+This guide covers installing Speakora on various platforms.
+
+## Prerequisites
+
+- **Python 3.10+** (required for SeamlessM4T)
+- **Git** for cloning the repository
+- **FFmpeg** for video/audio processing
+- **Node.js 18+** (optional, for frontend development)
+
+### GPU Support
+
+For best performance, a GPU is recommended:
+
+| Platform | Requirements |
+|----------|-------------|
+| NVIDIA | CUDA 11.8+ with 8GB+ VRAM |
+| Apple Silicon | macOS 12.0+ with Metal/MPS |
+| AMD | ROCm 5.0+ |
+
+## Quick Install
+
+```bash
+# Clone the repository
+git clone https://github.com/rennerdo30/speakora.git
+cd speakora
+
+# Run the setup script
+./setup.sh
+
+# Start the application
+./start.sh
+```
+
+The setup script will:
+
+1. Create a Python virtual environment
+2. Install all Python dependencies
+3. Install frontend dependencies (if Node.js is available)
+4. Build the frontend (if Node.js is available)
+5. Create necessary directories
+
+## Manual Installation
+
+### 1. Create Virtual Environment
+
+```bash
+python3.10 -m venv venv
+source venv/bin/activate  # Linux/macOS
+# or
+venv\Scripts\activate  # Windows
+```
+
+### 2. Install Python Dependencies
+
+```bash
+pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+```
+
+### 3. Install Development Dependencies (Optional)
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+### 4. Install Frontend (Optional)
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+### 5. Download Model
+
+```bash
+./run.sh download --model-size medium
+```
+
+Available model sizes:
+
+| Size | Model | VRAM | Quality |
+|------|-------|------|---------|
+| medium | SeamlessM4T v1 | ~8GB | Good |
+| large | SeamlessM4T v2 | ~16GB | Best |
+
+## Platform-Specific Notes
+
+### macOS
+
+Install FFmpeg via Homebrew:
+
+```bash
+brew install ffmpeg
+```
+
+### Ubuntu/Debian
+
+```bash
+sudo apt update
+sudo apt install ffmpeg python3.10 python3.10-venv
+```
+
+### Windows
+
+1. Install Python 3.10+ from [python.org](https://www.python.org/)
+2. Install FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html)
+3. Add FFmpeg to your PATH
+
+## Docker Installation
+
+For containerized deployment, see the [Docker guide](../deployment/docker.md).
+
+## Troubleshooting
+
+### GPU Not Detected
+
+Check device detection:
+
+```bash
+./run.sh info
+```
+
+Force CPU mode:
+
+```bash
+export SEAMLESS_DEVICE=cpu
+./start.sh
+```
+
+### Out of Memory
+
+Use a smaller model:
+
+```bash
+# In config/default.yaml
+model:
+  size: "medium"
+```
+
+### Model Download Issues
+
+Manually download models:
+
+```bash
+./run.sh download --model-size medium
+```
+
+## Next Steps
+
+- [Quick Start Guide](quickstart.md)
+- [Configuration Options](configuration.md)

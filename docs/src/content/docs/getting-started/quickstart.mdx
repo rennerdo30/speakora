@@ -1,0 +1,130 @@
+---
+title: "Quick Start"
+description: "Documentation for Quick Start"
+---
+
+# Quick Start
+
+Get started with S2ST Translator in just a few minutes.
+
+## Starting the Application
+
+```bash
+# Start both the worker and web server
+./start.sh
+```
+
+This will:
+
+1. Activate the virtual environment
+2. Update dependencies
+3. Build the frontend
+4. Start the background worker
+5. Start the web server on port 8000
+
+Open [http://localhost:8000](http://localhost:8000) in your browser.
+
+## Web Dashboard
+
+### Creating a Translation Job
+
+1. Click **"New Translation"** in the dashboard
+2. Choose your input method:
+    - **Upload Files** - Drag and drop audio/video files
+    - **Local Path** - Enter a path on the server
+    - **YouTube URL** - Paste a YouTube video or playlist URL
+3. Select the **target language**
+4. Click **Submit**
+
+### Monitoring Jobs
+
+- View real-time progress in the dashboard
+- Check job details by clicking the view icon
+- Download completed translations
+
+## Command Line Usage
+
+### Translate a Single File
+
+```bash
+./run.sh translate --input audio.wav --target-lang deu
+```
+
+### Submit a Job to the Queue
+
+```bash
+./run.sh job submit --input audio.wav --target-lang fra
+```
+
+### List All Jobs
+
+```bash
+./run.sh job list
+```
+
+### Check System Status
+
+```bash
+./run.sh info
+```
+
+## Example Workflows
+
+### Translate a YouTube Video
+
+=== "Web Dashboard"
+
+    1. Click "New Translation"
+    2. Select "YouTube URL" tab
+    3. Paste the video URL
+    4. Select target language
+    5. Submit and wait for completion
+
+=== "CLI"
+
+    The CLI currently requires downloading first:
+
+    ```bash
+    # Download with yt-dlp
+    yt-dlp -x --audio-format wav "https://youtube.com/watch?v=..."
+
+    # Translate
+    ./run.sh translate --input video.wav --target-lang jpn
+    ```
+
+### Batch Process Multiple Files
+
+=== "Web Dashboard"
+
+    1. Click "New Translation"
+    2. Drag multiple files into the upload zone
+    3. Select target language
+    4. Submit as batch
+
+=== "CLI"
+
+    ```bash
+    # Process all files in a directory
+    for f in input/*.wav; do
+        ./run.sh job submit --input "$f" --target-lang deu
+    done
+    ```
+
+### Translate a Video with Re-muxing
+
+When you upload a video file (MP4, MKV, etc.), S2ST Translator will:
+
+1. Extract the audio track
+2. Translate the audio
+3. Re-mux the translated audio back into the video
+
+The output includes both:
+
+- `filename_translated.mp4` - Video with translated audio
+- `filename_translated.wav` - Standalone translated audio
+
+## Next Steps
+
+- [Configuration Guide](configuration.md) - Customize settings
+- [CLI Reference](../user-guide/cli.md) - Full CLI documentation
+- [API Reference](../api/rest.md) - Integrate with your applications

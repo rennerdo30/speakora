@@ -1,0 +1,191 @@
+---
+title: "Configuration"
+description: "Documentation for Configuration"
+---
+
+# Configuration
+
+S2ST Translator uses a layered configuration system with the following priority (highest to lowest):
+
+1. Command-line flags
+2. Environment variables
+3. `config/default.yaml`
+4. Built-in defaults
+
+## Configuration File
+
+The main configuration file is `config/default.yaml`:
+
+```yaml
+# Model settings
+model:
+  size: "large"           # small, medium, large
+  device: "auto"          # auto, cuda, mps, cpu
+  dtype: "float16"        # float16, float32
+  num_beams: 5            # Beam search beams
+  temperature: 1.0        # Sampling temperature
+
+# Translation defaults
+translation:
+  source_lang: "auto"     # auto-detect or language code
+  target_lang: "eng"      # Default target language
+  task: "s2st"            # Speech-to-speech translation
+
+# Audio processing
+audio:
+  target_sample_rate: 16000  # SeamlessM4T requirement
+  normalize: true
+  to_mono: true
+
+# File paths
+paths:
+  input_dir: "./input"
+  output_dir: "./output"
+  translated_subdir: "translated"
+  logs_subdir: "logs"
+
+# Logging
+logging:
+  level: "INFO"           # DEBUG, INFO, WARNING, ERROR
+  console:
+    enabled: true
+  file:
+    enabled: true
+    max_bytes: 10485760   # 10MB
+    backup_count: 5
+
+# Processing
+processing:
+  num_workers: 1
+  batch_size: 1
+  resume_from_checkpoint: true
+
+# Security (optional)
+security:
+  api_key: null           # Set to require API key
+```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SEAMLESS_DEVICE` | Force device: `auto`, `cuda`, `mps`, `cpu` | `auto` |
+| `SEAMLESS_MODEL_SIZE` | Model size: `small`, `medium`, `large` | `medium` |
+| `LOG_LEVEL` | Logging level | `INFO` |
+| `API_KEY` | API authentication key | None |
+| `NUM_WORKERS` | Number of worker processes | `1` |
+
+Example:
+
+```bash
+export SEAMLESS_DEVICE=cuda
+export SEAMLESS_MODEL_SIZE=large
+./start.sh
+```
+
+## Model Selection
+
+| Size | Model ID | VRAM | Quality | Speed |
+|------|----------|------|---------|-------|
+| `small` | seamless-m4t-medium (v1) | ~4GB | Good | Fast |
+| `medium` | seamless-m4t-medium (v1) | ~8GB | Good | Medium |
+| `large` | seamless-m4t-v2-large | ~16GB | Best | Slower |
+
+> **Note**
+> The `small` and `medium` sizes use the same v1 model. The `large` size uses the v2 model with improved quality.
+
+## Supported Languages
+
+S2ST Translator supports these language codes:
+
+### Major Languages
+
+| Code | Language |
+|------|----------|
+| `eng` | English |
+| `deu` | German |
+| `fra` | French |
+| `spa` | Spanish |
+| `ita` | Italian |
+| `por` | Portuguese |
+| `nld` | Dutch |
+| `pol` | Polish |
+| `rus` | Russian |
+| `ukr` | Ukrainian |
+| `cmn` | Chinese (Mandarin) |
+| `jpn` | Japanese |
+| `kor` | Korean |
+| `arb` | Arabic |
+| `hin` | Hindi |
+| `tur` | Turkish |
+
+### All Supported Codes
+
+```
+afr, amh, arb, ary, arz, asm, azj, bel, ben, bos, bul, cat, ceb, ces, ckb,
+cmn, cym, dan, deu, ell, eng, est, eus, fin, fra, fuv, gaz, gle, glg, guj,
+hau, heb, hin, hrv, hun, hye, ibo, ind, isl, ita, jav, jpn, kam, kan, kat,
+kaz, kea, khk, khm, kir, kor, lao, lit, ltz, lug, luo, lvs, mai, mal, mar,
+mkd, mlt, mni, mya, nld, nno, nob, npi, nya, oci, ory, pan, pbt, pes, pol,
+por, ron, rus, slk, slv, sna, snd, som, spa, srp, swe, swh, tam, tel, tgk,
+tgl, tha, tur, ukr, urd, uzn, vie, xho, yor, zho, zul
+```
+
+## API Security
+
+To require API key authentication:
+
+```yaml
+# config/default.yaml
+security:
+  api_key: "your-secret-key-here"
+```
+
+Or via environment:
+
+```bash
+export API_KEY="your-secret-key-here"
+./start.sh
+```
+
+Clients must include the key in requests:
+
+```bash
+curl -H "X-API-KEY: your-secret-key-here" http://localhost:8000/api/jobs
+```
+
+## Performance Tuning
+
+### GPU Memory Optimization
+
+For limited VRAM, use the medium model:
+
+```yaml
+model:
+  size: "medium"
+  dtype: "float16"
+```
+
+### Multi-Worker Processing
+
+For high throughput with multiple GPUs:
+
+```yaml
+processing:
+  num_workers: 2
+```
+
+Or via environment:
+
+```bash
+NUM_WORKERS=2 ./start.sh
+```
+
+### Chunk Size
+
+Adjust audio chunk duration for memory vs. quality tradeoff:
+
+```yaml
+audio:
+  chunk_duration: 10.0  # seconds
+```
