@@ -1,6 +1,7 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightThemeGalaxy from "starlight-theme-galaxy";
+import starlightClientMermaid from "@pasqal-io/starlight-client-mermaid";
 
 export default defineConfig({
   // site and base are set via CLI args in CI (from actions/configure-pages)
@@ -8,7 +9,7 @@ export default defineConfig({
     starlight({
       title: "Speakora",
       description: "Speech-to-Speech Translation Made Simple - Powered by Meta's SeamlessM4T v2",
-      plugins: [starlightThemeGalaxy()],
+      plugins: [starlightThemeGalaxy(), starlightClientMermaid()],
       customCss: ["./src/styles/custom.css"],
       social: [
         { icon: "github", label: "GitHub", href: "https://github.com/rennerdo30/speakora" },
