@@ -9,6 +9,8 @@ export default defineConfig({
     starlight({
       title: "Speakora",
       description: "Speech-to-Speech Translation Made Simple - Powered by Meta's SeamlessM4T v2",
+      logo: { src: "/logo.svg", alt: "Speakora" },
+      favicon: "/logo.svg",
       plugins: [starlightThemeGalaxy(), starlightClientMermaid()],
       customCss: ["./src/styles/custom.css"],
       social: [

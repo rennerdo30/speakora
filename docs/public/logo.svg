@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Speakora: Speech bubble with sound waves -->
+  <path d="M6 8h14a4 4 0 014 4v6a4 4 0 01-4 4H12l-4 4v-4H6a4 4 0 01-4-4v-6a4 4 0 014-4z" stroke="#22d3ee" stroke-width="2" fill="none"/>
+  <path d="M26 12c1.5 1 2 2.5 2 4s-.5 3-2 4" stroke="#f97316" stroke-width="2" stroke-linecap="round"/>
+  <path d="M29 9c2 1.5 3 4 3 7s-1 5.5-3 7" stroke="#f97316" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+  <circle cx="9" cy="15" r="1.5" fill="#22d3ee"/>
+  <circle cx="14" cy="15" r="1.5" fill="#22d3ee"/>
+  <circle cx="19" cy="15" r="1.5" fill="#22d3ee"/>
+</svg>
