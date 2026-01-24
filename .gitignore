@@ -24,7 +24,13 @@ output/
 input/
 *.db
 *.log
+config/user.yaml
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Astro generated files
+docs/.astro
+docs/dist
+docs/node_modules
