@@ -1,255 +1,276 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { computed, nextTick, ref, onMounted, watch, onUnmounted } from 'vue'
 import axios from 'axios'
-import { Search, X } from 'lucide-vue-next'
+import { Search, X, RefreshCw, ScrollText } from 'lucide-vue-next'
+import { JOB_LOG_POLL_MS } from '../constants'
 
 const props = defineProps<{
   jobId: string | null
   autoRefresh?: boolean
 }>()
 
-const emit = defineEmits(['close'])
+/** How close to the bottom still counts as "following the tail", in pixels. */
+const SCROLL_BOTTOM_TOLERANCE_PX = 24
 
 const logs = ref('')
 const loading = ref(false)
+const error = ref('')
 const searchQuery = ref('')
 const autoScroll = ref(true)
-const refreshInterval = ref<number | null>(null)
+const logContainer = ref<HTMLElement | null>(null)
+let refreshTimer: ReturnType<typeof setInterval> | undefined
 
 const fetchLogs = async () => {
   if (!props.jobId) return
-  
+
   loading.value = true
   try {
     const response = await axios.get(`/api/jobs/${props.jobId}/logs`)
-    logs.value = response.data.logs || 'No logs available for this job yet.'
+    logs.value = response.data.logs || ''
+    error.value = ''
   } catch (err) {
     console.error('Failed to fetch logs', err)
-    logs.value = 'Failed to load logs.'
+    error.value = 'Could not load the logs for this job.'
   } finally {
     loading.value = false
   }
 }
 
-const filteredLogs = () => {
-  if (!searchQuery.value) return logs.value
-  
-  const lines = logs.value.split('\n')
-  const query = searchQuery.value.toLowerCase()
-  return lines
-    .filter(line => line.toLowerCase().includes(query))
+const filteredLogs = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  if (!query) return logs.value
+
+  return logs.value
+    .split('\n')
+    .filter((line) => line.toLowerCase().includes(query))
     .join('\n')
-}
+})
+
+const matchCount = computed(() =>
+  filteredLogs.value ? filteredLogs.value.split('\n').filter(Boolean).length : 0
+)
 
 const scrollToBottom = () => {
-  const container = document.getElementById('log-container')
+  const container = logContainer.value
   if (container && autoScroll.value) {
     container.scrollTop = container.scrollHeight
   }
 }
 
-watch(() => props.jobId, () => {
-  if (props.jobId) {
-    fetchLogs()
-  }
-}, { immediate: true })
+/**
+ * Follow the tail only while the reader is at the bottom. Programmatic scrolls
+ * also land at the bottom, so they keep auto-scroll enabled.
+ */
+const onScroll = () => {
+  const container = logContainer.value
+  if (!container) return
 
-watch(() => logs.value, () => {
-  if (autoScroll.value) {
-    setTimeout(scrollToBottom, 100)
-  }
+  const distanceFromBottom =
+    container.scrollHeight - container.scrollTop - container.clientHeight
+  autoScroll.value = distanceFromBottom <= SCROLL_BOTTOM_TOLERANCE_PX
+}
+
+watch(
+  () => props.jobId,
+  (jobId) => {
+    logs.value = ''
+    if (jobId) fetchLogs()
+  },
+  { immediate: true }
+)
+
+watch(filteredLogs, () => {
+  if (autoScroll.value) nextTick(scrollToBottom)
 })
 
 onMounted(() => {
   if (props.autoRefresh) {
-    refreshInterval.value = setInterval(fetchLogs, 2000) // Refresh every 2 seconds
+    refreshTimer = setInterval(fetchLogs, JOB_LOG_POLL_MS)
   }
 })
 
-onUnmounted(() => {
-  if (refreshInterval.value) {
-    clearInterval(refreshInterval.value)
-  }
-})
+onUnmounted(() => clearInterval(refreshTimer))
 </script>
 
 <template>
-  <div class="log-viewer glass-card">
+  <section class="log-viewer" aria-labelledby="job-logs-heading">
     <div class="log-header">
-      <h3>Job Logs</h3>
+      <h3 id="job-logs-heading">
+        <ScrollText :size="16" aria-hidden="true" />
+        Job logs
+      </h3>
       <div class="log-controls">
-        <div class="search-box">
-          <Search :size="16" />
-          <input 
-            v-model="searchQuery" 
-            type="text" 
-            placeholder="Search logs..."
-            class="search-input"
+        <div class="search-field">
+          <label class="sr-only" for="log-search">Search logs</label>
+          <span class="search-icon" aria-hidden="true"><Search :size="16" /></span>
+          <input
+            id="log-search"
+            v-model="searchQuery"
+            type="search"
+            class="form-input"
+            placeholder="Search logs…"
           />
-          <button 
-            v-if="searchQuery" 
-            @click="searchQuery = ''" 
-            class="clear-search"
+          <button
+            v-if="searchQuery"
+            type="button"
+            class="icon-btn is-borderless clear-search"
+            aria-label="Clear log search"
+            @click="searchQuery = ''"
           >
-            <X :size="14" />
+            <X :size="14" aria-hidden="true" />
           </button>
         </div>
         <label class="auto-scroll-toggle">
-          <input 
-            type="checkbox" 
-            v-model="autoScroll"
-          />
-          Auto-scroll
+          <input v-model="autoScroll" type="checkbox" />
+          Follow
         </label>
-        <button @click="fetchLogs" class="refresh-btn">Refresh</button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          :disabled="loading"
+          @click="fetchLogs"
+        >
+          <RefreshCw :size="14" :class="{ spin: loading }" aria-hidden="true" />
+          Refresh
+        </button>
       </div>
     </div>
-    
-    <div 
-      id="log-container" 
+
+    <p v-if="error" class="alert alert-danger" role="alert">{{ error }}</p>
+
+    <div
+      ref="logContainer"
       class="log-container"
-      @scroll="autoScroll = false"
+      tabindex="0"
+      role="log"
+      aria-label="Job log output"
+      @scroll.passive="onScroll"
     >
-      <div v-if="loading && !logs" class="loading">
-        Loading logs...
-      </div>
-      <pre v-else class="log-content">{{ filteredLogs() }}</pre>
+      <p v-if="loading && !logs" class="log-placeholder" role="status">Loading logs…</p>
+      <p v-else-if="!logs" class="log-placeholder">No log output for this job yet.</p>
+      <p v-else-if="searchQuery && matchCount === 0" class="log-placeholder">
+        No log lines match “{{ searchQuery }}”.
+      </p>
+      <pre v-else class="log-content">{{ filteredLogs }}</pre>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
 .log-viewer {
-  padding: 24px;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  max-height: 600px;
+  gap: var(--space-3);
+  min-height: 0;
 }
 
 .log-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .log-header h3 {
-  font-size: 1.125rem;
-  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .log-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: var(--space-3);
 }
 
-.search-box {
+.search-field {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 6px 12px;
-  position: relative;
 }
 
-.search-input {
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  font-size: 0.875rem;
-  width: 200px;
-  outline: none;
-}
-
-.search-input::placeholder {
+.search-icon {
+  position: absolute;
+  left: var(--space-3);
+  display: grid;
+  place-items: center;
   color: var(--text-muted);
+  pointer-events: none;
+}
+
+.search-field .form-input {
+  width: 13rem;
+  min-height: var(--control-height-sm);
+  padding-left: var(--space-8);
+  padding-right: var(--space-8);
+  font-size: var(--text-md);
+}
+
+.search-field .form-input::-webkit-search-cancel-button {
+  display: none;
 }
 
 .clear-search {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0;
-  display: flex;
-  align-items: center;
+  position: absolute;
+  right: var(--space-1);
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 .auto-scroll-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.875rem;
+  gap: var(--space-2);
   color: var(--text-secondary);
+  font-size: var(--text-md);
   cursor: pointer;
-}
-
-.refresh-btn {
-  background: var(--primary-color);
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.refresh-btn:hover {
-  background: var(--primary-hover);
 }
 
 .log-container {
   flex: 1;
-  background: rgba(0, 0, 0, 0.3);
+  min-height: 12rem;
+  max-height: 22rem;
+  overflow: auto;
+  padding: var(--space-4);
+  background: var(--surface-sunken);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 16px;
-  overflow-y: auto;
-  overflow-x: auto;
-  min-height: 300px;
+  border-radius: var(--radius-lg);
 }
 
-.loading {
-  text-align: center;
-  padding: 40px;
+.log-placeholder {
+  padding: var(--space-8) 0;
   color: var(--text-muted);
+  font-size: var(--text-md);
+  text-align: center;
 }
 
 .log-content {
   margin: 0;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 0.8125rem;
-  color: #a78bfa;
+  color: var(--code-fg);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
   white-space: pre-wrap;
-  line-height: 1.5;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
-@media (max-width: 768px) {
-  .log-viewer {
-    padding: 16px;
-  }
-  
+@media (max-width: 640px) {
   .log-header {
-    flex-direction: column;
     align-items: flex-start;
+    flex-direction: column;
   }
-  
+
   .log-controls {
     width: 100%;
   }
-  
-  .search-input {
-    width: 150px;
+
+  .search-field {
+    flex: 1 1 10rem;
+  }
+
+  .search-field .form-input {
+    width: 100%;
   }
 }
 </style>
-

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import axios from 'axios'
-import { X, Send, FileAudio, Globe, Zap } from 'lucide-vue-next'
+import { X, Send, FileAudio, Globe, Zap, AlertCircle } from 'lucide-vue-next'
+import { TARGET_LANGUAGES } from '../constants'
+import { useDialog } from '../composables/useDialog'
 
 const props = defineProps<{
   show: boolean
@@ -9,38 +11,35 @@ const props = defineProps<{
 
 const emit = defineEmits(['close', 'submitted'])
 
+const PRIORITY_MIN = 0
+const PRIORITY_MAX = 100
+
 const input_file = ref('')
 const target_lang = ref('deu')
 const source_lang = ref('auto')
-const priority = ref(0)
+const priority = ref(PRIORITY_MIN)
 const expressive = ref(false)
 const reference_audio = ref('')
 const submitting = ref(false)
 const error = ref('')
 
-const languages = [
-  { code: 'deu', name: 'German' },
-  { code: 'fra', name: 'French' },
-  { code: 'spa', name: 'Spanish' },
-  { code: 'ita', name: 'Italian' },
-  { code: 'jpn', name: 'Japanese' },
-  { code: 'zho', name: 'Chinese' },
-  { code: 'rus', name: 'Russian' },
-  { code: 'kor', name: 'Korean' }
-]
+const { dialogRef } = useDialog(
+  () => props.show,
+  () => emit('close')
+)
 
 const submitJob = async () => {
-  if (!input_file.value) {
-    error.value = 'Please provide an input file path.'
+  if (!input_file.value.trim()) {
+    error.value = 'Please provide the path to an input file.'
     return
   }
 
   submitting.value = true
   error.value = ''
-  
+
   try {
     await axios.post('/api/jobs', {
-      input_file: input_file.value,
+      input_file: input_file.value.trim(),
       target_lang: target_lang.value,
       source_lang: source_lang.value,
       priority: priority.value,
@@ -50,8 +49,9 @@ const submitJob = async () => {
     emit('submitted')
     emit('close')
     input_file.value = ''
+    reference_audio.value = ''
   } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Failed to submit job.'
+    error.value = err.response?.data?.detail || 'Could not submit the job. Please try again.'
   } finally {
     submitting.value = false
   }
@@ -59,291 +59,241 @@ const submitJob = async () => {
 </script>
 
 <template>
-  <div v-if="show" class="modal-overlay" @click.self="emit('close')">
-    <div class="modal-content glass-card fade-in">
-      <div class="modal-header">
-        <h2>New Translation</h2>
-        <button class="close-btn" @click="emit('close')">
-          <X :size="20" />
-        </button>
-      </div>
-
-      <div class="modal-body">
-        <div class="form-group">
-          <label>
-            <FileAudio :size="16" />
-            Input File Path
-          </label>
-          <input 
-            v-model="input_file" 
-            type="text" 
-            placeholder="/path/to/audio.wav"
-            class="form-input"
-          />
-          <span class="hint">Absolute path to a .wav or .mp3 file.</span>
+  <Transition name="modal">
+    <div v-if="show" class="modal-overlay" @click.self="emit('close')">
+      <div
+        ref="dialogRef"
+        class="modal-content glass-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-job-title"
+        tabindex="-1"
+      >
+        <div class="modal-header">
+          <h2 id="new-job-title">New translation</h2>
+          <button
+            type="button"
+            class="icon-btn is-borderless"
+            aria-label="Close dialog"
+            @click="emit('close')"
+          >
+            <X :size="20" aria-hidden="true" />
+          </button>
         </div>
 
-        <div class="form-row">
+        <form class="modal-body" @submit.prevent="submitJob">
           <div class="form-group">
-            <label>
-              <Globe :size="16" />
-              Source Language
+            <label for="job-input-file">
+              <FileAudio :size="16" aria-hidden="true" />
+              Input file path
             </label>
-            <select v-model="source_lang" class="form-input">
-              <option value="auto">Auto-detect</option>
-              <option v-for="lang in languages" :key="lang.code" :value="lang.code">
-                {{ lang.name }}
-              </option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>
-              <Globe :size="16" />
-              Target Language
-            </label>
-            <select v-model="target_lang" class="form-input">
-              <option v-for="lang in languages" :key="lang.code" :value="lang.code">
-                {{ lang.name }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>
-            <Zap :size="16" />
-            Priority
-          </label>
-          <input 
-            v-model.number="priority" 
-            type="number" 
-            min="0" 
-            max="100"
-            class="form-input"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input 
-              v-model="expressive" 
-              type="checkbox" 
-              class="checkbox-input"
+            <input
+              id="job-input-file"
+              v-model="input_file"
+              data-autofocus
+              type="text"
+              class="form-input"
+              placeholder="/path/to/audio.wav"
+              spellcheck="false"
+              autocomplete="off"
+              aria-describedby="job-input-file-hint"
             />
-            <span>Expressive Voice Mode</span>
-          </label>
-          <span class="hint">Preserve speaker's voice characteristics (prosody, tone) in translation</span>
-        </div>
+            <span id="job-input-file-hint" class="hint">
+              Absolute path to a .wav or .mp3 file on the machine running Speakora.
+            </span>
+          </div>
 
-        <div v-if="expressive" class="form-group">
-          <label>
-            <FileAudio :size="16" />
-            Reference Audio (Optional)
-          </label>
-          <input 
-            v-model="reference_audio" 
-            type="text" 
-            placeholder="/path/to/reference.wav (leave empty to use input file)"
-            class="form-input"
-          />
-          <span class="hint">Path to reference audio for voice cloning. If empty, input file will be used.</span>
-        </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="job-source-lang">
+                <Globe :size="16" aria-hidden="true" />
+                Source language
+              </label>
+              <select id="job-source-lang" v-model="source_lang" class="form-input">
+                <option value="auto">Auto-detect</option>
+                <option v-for="lang in TARGET_LANGUAGES" :key="lang.code" :value="lang.code">
+                  {{ lang.name }}
+                </option>
+              </select>
+            </div>
 
-        <div v-if="error" class="error-message">{{ error }}</div>
-      </div>
+            <div class="form-group">
+              <label for="job-target-lang">
+                <Globe :size="16" aria-hidden="true" />
+                Target language
+              </label>
+              <select id="job-target-lang" v-model="target_lang" class="form-input">
+                <option v-for="lang in TARGET_LANGUAGES" :key="lang.code" :value="lang.code">
+                  {{ lang.name }}
+                </option>
+              </select>
+            </div>
+          </div>
 
-      <div class="modal-footer">
-        <button class="btn btn-secondary" @click="emit('close')">Cancel</button>
-        <button 
-          class="btn btn-primary" 
-          @click="submitJob"
-          :disabled="submitting"
-        >
-          <Send :size="18" />
-          {{ submitting ? 'Submitting...' : 'Submit Job' }}
-        </button>
+          <div class="form-group">
+            <label for="job-priority">
+              <Zap :size="16" aria-hidden="true" />
+              Priority
+            </label>
+            <input
+              id="job-priority"
+              v-model.number="priority"
+              type="number"
+              :min="PRIORITY_MIN"
+              :max="PRIORITY_MAX"
+              class="form-input"
+              aria-describedby="job-priority-hint"
+            />
+            <span id="job-priority-hint" class="hint">
+              Higher values are picked up first ({{ PRIORITY_MIN }}–{{ PRIORITY_MAX }}).
+            </span>
+          </div>
+
+          <div class="form-group">
+            <div class="checkbox-label">
+              <input id="job-expressive" v-model="expressive" type="checkbox" />
+              <label for="job-expressive">Expressive voice mode</label>
+            </div>
+            <span class="hint">
+              Preserves the speaker's prosody and tone in the translated audio.
+            </span>
+          </div>
+
+          <div v-if="expressive" class="form-group">
+            <label for="job-reference-audio">
+              <FileAudio :size="16" aria-hidden="true" />
+              Reference audio (optional)
+            </label>
+            <input
+              id="job-reference-audio"
+              v-model="reference_audio"
+              type="text"
+              class="form-input"
+              placeholder="/path/to/reference.wav"
+              spellcheck="false"
+              autocomplete="off"
+              aria-describedby="job-reference-audio-hint"
+            />
+            <span id="job-reference-audio-hint" class="hint">
+              Used for voice cloning. Leave empty to use the input file itself.
+            </span>
+          </div>
+
+          <p v-if="error" class="alert alert-danger" role="alert">
+            <AlertCircle :size="18" aria-hidden="true" />
+            <span>{{ error }}</span>
+          </p>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="emit('close')">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="submitting" :aria-busy="submitting">
+              <span v-if="submitting" class="spinner spinner-sm" aria-hidden="true"></span>
+              <Send v-else :size="18" aria-hidden="true" />
+              {{ submitting ? 'Submitting…' : 'Submit job' }}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
-  </div>
+  </Transition>
 </template>
 
 <style scoped>
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  inset: 0;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  padding: var(--page-gutter);
+  background: var(--overlay-backdrop);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .modal-content {
-  width: 500px;
-  max-width: 95vw;
-  max-height: 90vh;
-  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  width: var(--modal-width-sm);
+  max-width: 100%;
+  max-height: calc(100vh - var(--page-gutter) * 2);
   overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.modal-content:focus {
+  outline: none;
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
 }
 
-.close-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.2s;
+.modal-header h2 {
+  font-size: var(--text-xl);
 }
 
-.close-btn:hover {
-  color: var(--text-primary);
-}
-
-.form-group {
-  margin-bottom: 20px;
+.modal-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.form-group label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  font-weight: 500;
+  gap: var(--space-5);
 }
 
 .form-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.form-input {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 10px 14px;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 0.9375rem;
-  transition: all 0.2s;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.hint {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.checkbox-input {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.error-message {
-  color: #f87171;
-  font-size: 0.875rem;
-  margin-top: 12px;
-  background: rgba(239, 68, 68, 0.1);
-  padding: 8px 12px;
-  border-radius: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: var(--space-4);
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 32px;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
 }
 
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* The spinner inherits the button's text colour while submitting. */
+.btn-primary .spinner {
+  border-color: currentColor;
+  border-top-color: transparent;
 }
 
-/* Mobile Responsive */
-@media (max-width: 768px) {
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.modal-enter-active .modal-content,
+.modal-leave-active .modal-content {
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from .modal-content,
+.modal-leave-to .modal-content {
+  transform: translateY(0.75rem) scale(0.98);
+}
+
+@media (max-width: 640px) {
   .modal-content {
-    width: 90vw;
-    padding: 24px;
+    padding: var(--space-5);
   }
-  
-  .modal-header {
-    margin-bottom: 20px;
-  }
-  
-  .modal-header h2 {
-    font-size: 1.25rem;
-  }
-  
-  .form-row {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-  
-  .form-group {
-    margin-bottom: 16px;
-  }
-  
+
   .modal-footer {
     flex-direction: column-reverse;
-    margin-top: 24px;
   }
-  
+
   .modal-footer .btn {
     width: 100%;
-  }
-}
-
-@media (max-width: 480px) {
-  .modal-content {
-    width: 95vw;
-    padding: 16px;
-    max-height: 95vh;
-  }
-  
-  .modal-header h2 {
-    font-size: 1.125rem;
-  }
-  
-  .form-group label {
-    font-size: 0.8125rem;
-  }
-  
-  .form-input {
-    padding: 8px 12px;
-    font-size: 0.875rem;
-  }
-  
-  .hint {
-    font-size: 0.6875rem;
   }
 }
 </style>
