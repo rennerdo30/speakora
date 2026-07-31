@@ -78,97 +78,99 @@ defineExpose({ fetchJobDetails })
 </script>
 
 <template>
-  <Transition name="modal">
-    <div v-if="show" class="modal-overlay" @click.self="emit('close')">
-      <div
-        ref="dialogRef"
-        class="modal-content glass-card"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="job-details-title"
-        tabindex="-1"
-      >
-        <div class="modal-header">
-          <div class="header-title">
-            <h2 id="job-details-title">Job details</h2>
-            <span class="job-id">{{ jobId }}</span>
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="show" class="modal-overlay" @click.self="emit('close')">
+        <div
+          ref="dialogRef"
+          class="modal-content glass-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="job-details-title"
+          tabindex="-1"
+        >
+          <div class="modal-header">
+            <div class="header-title">
+              <h2 id="job-details-title">Job details</h2>
+              <span class="job-id">{{ jobId }}</span>
+            </div>
+            <button
+              type="button"
+              class="icon-btn is-borderless"
+              aria-label="Close dialog"
+              data-autofocus
+              @click="emit('close')"
+            >
+              <X :size="20" aria-hidden="true" />
+            </button>
           </div>
-          <button
-            type="button"
-            class="icon-btn is-borderless"
-            aria-label="Close dialog"
-            data-autofocus
-            @click="emit('close')"
-          >
-            <X :size="20" aria-hidden="true" />
-          </button>
-        </div>
 
-        <p v-if="error" class="alert alert-danger" role="alert">
-          <AlertTriangle :size="18" aria-hidden="true" />
-          <span>{{ error }}</span>
-        </p>
+          <p v-if="error" class="alert alert-danger" role="alert">
+            <AlertTriangle :size="18" aria-hidden="true" />
+            <span>{{ error }}</span>
+          </p>
 
-        <div v-else-if="loading && !job" class="loading-state">
-          <div class="spinner" aria-hidden="true"></div>
-          <p role="status">Loading details…</p>
-        </div>
+          <div v-else-if="loading && !job" class="loading-state">
+            <div class="spinner" aria-hidden="true"></div>
+            <p role="status">Loading details…</p>
+          </div>
 
-        <div v-else-if="job" class="modal-body">
-          <dl class="details-grid">
-            <div class="detail-item">
-              <dt><FileAudio :size="14" aria-hidden="true" /> Input file</dt>
-              <dd class="is-path">{{ job.input_file }}</dd>
-            </div>
-            <div class="detail-item">
-              <dt><Globe :size="14" aria-hidden="true" /> Target language</dt>
-              <dd>{{ job.target_lang?.toUpperCase() }}</dd>
-            </div>
-            <div class="detail-item">
-              <dt><AlertCircle :size="14" aria-hidden="true" /> Status</dt>
-              <dd>
-                <span :class="`badge badge-${String(job.status).toLowerCase()}`">
-                  {{ job.status }}
-                </span>
-              </dd>
-            </div>
-            <div class="detail-item">
-              <dt><Clock :size="14" aria-hidden="true" /> Created</dt>
-              <dd>{{ formatDateTime(job.created_at) }}</dd>
-            </div>
-            <div v-if="job.processing_time_seconds" class="detail-item">
-              <dt><Timer :size="14" aria-hidden="true" /> Processing time</dt>
-              <dd>{{ formatDuration(job.processing_time_seconds) }}</dd>
-            </div>
-            <div v-if="estimatedRemainingSeconds !== null" class="detail-item">
-              <dt><Timer :size="14" aria-hidden="true" /> Estimated remaining</dt>
-              <dd>{{ formatDuration(estimatedRemainingSeconds) }}</dd>
-            </div>
-          </dl>
-
-          <section v-if="checkpoints.length > 0" aria-labelledby="checkpoints-heading">
-            <h3 id="checkpoints-heading">
-              <History :size="16" aria-hidden="true" />
-              Checkpoint history
-            </h3>
-            <ul class="checkpoints-list">
-              <li v-for="checkpoint in checkpoints" :key="checkpoint.id" class="checkpoint-item">
-                <span class="checkpoint-time">{{ formatDateTime(checkpoint.created_at) }}</span>
-                <span class="checkpoint-info">
-                  <span>Audio position: {{ formatCount(checkpoint.audio_position) }} bytes</span>
-                  <span v-if="checkpoint.last_successful_frame">
-                    Frame: {{ formatCount(checkpoint.last_successful_frame) }}
+          <div v-else-if="job" class="modal-body">
+            <dl class="details-grid">
+              <div class="detail-item">
+                <dt><FileAudio :size="14" aria-hidden="true" /> Input file</dt>
+                <dd class="is-path">{{ job.input_file }}</dd>
+              </div>
+              <div class="detail-item">
+                <dt><Globe :size="14" aria-hidden="true" /> Target language</dt>
+                <dd>{{ job.target_lang?.toUpperCase() }}</dd>
+              </div>
+              <div class="detail-item">
+                <dt><AlertCircle :size="14" aria-hidden="true" /> Status</dt>
+                <dd>
+                  <span :class="`badge badge-${String(job.status).toLowerCase()}`">
+                    {{ job.status }}
                   </span>
-                </span>
-              </li>
-            </ul>
-          </section>
+                </dd>
+              </div>
+              <div class="detail-item">
+                <dt><Clock :size="14" aria-hidden="true" /> Created</dt>
+                <dd>{{ formatDateTime(job.created_at) }}</dd>
+              </div>
+              <div v-if="job.processing_time_seconds" class="detail-item">
+                <dt><Timer :size="14" aria-hidden="true" /> Processing time</dt>
+                <dd>{{ formatDuration(job.processing_time_seconds) }}</dd>
+              </div>
+              <div v-if="estimatedRemainingSeconds !== null" class="detail-item">
+                <dt><Timer :size="14" aria-hidden="true" /> Estimated remaining</dt>
+                <dd>{{ formatDuration(estimatedRemainingSeconds) }}</dd>
+              </div>
+            </dl>
 
-          <LogViewer :jobId="jobId" :autoRefresh="true" />
+            <section v-if="checkpoints.length > 0" aria-labelledby="checkpoints-heading">
+              <h3 id="checkpoints-heading">
+                <History :size="16" aria-hidden="true" />
+                Checkpoint history
+              </h3>
+              <ul class="checkpoints-list">
+                <li v-for="checkpoint in checkpoints" :key="checkpoint.id" class="checkpoint-item">
+                  <span class="checkpoint-time">{{ formatDateTime(checkpoint.created_at) }}</span>
+                  <span class="checkpoint-info">
+                    <span>Audio position: {{ formatCount(checkpoint.audio_position) }} bytes</span>
+                    <span v-if="checkpoint.last_successful_frame">
+                      Frame: {{ formatCount(checkpoint.last_successful_frame) }}
+                    </span>
+                  </span>
+                </li>
+              </ul>
+            </section>
+
+            <LogViewer :jobId="jobId" :autoRefresh="true" />
+          </div>
         </div>
       </div>
-    </div>
-  </Transition>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>

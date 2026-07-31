@@ -205,6 +205,8 @@ const queueCounts = computed(() => systemStore.status?.queue)
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
   gap: var(--space-4);
+  /* Cards hug their content instead of stretching to the tallest sibling. */
+  align-items: start;
 }
 
 .skeleton-card {

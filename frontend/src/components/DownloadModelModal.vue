@@ -45,84 +45,86 @@ const startDownload = async () => {
 </script>
 
 <template>
-  <Transition name="modal">
-    <div v-if="show" class="modal-overlay" @click.self="emit('close')">
-      <div
-        ref="dialogRef"
-        class="modal-content glass-card"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="download-model-title"
-        tabindex="-1"
-      >
-        <div class="modal-header">
-          <h2 id="download-model-title">Download models</h2>
-          <button
-            type="button"
-            class="icon-btn is-borderless"
-            aria-label="Close dialog"
-            @click="emit('close')"
-          >
-            <X :size="20" aria-hidden="true" />
-          </button>
-        </div>
-
-        <div class="modal-body">
-          <p class="description">
-            Pre-download the SeamlessM4T v2 weights into the local cache so the first translation
-            starts immediately.
-          </p>
-
-          <fieldset class="model-options">
-            <legend class="form-label">Model size</legend>
-            <label
-              v-for="option in MODEL_OPTIONS"
-              :key="option.value"
-              class="model-option"
-              :class="{ 'is-selected': modelSize === option.value }"
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="show" class="modal-overlay" @click.self="emit('close')">
+        <div
+          ref="dialogRef"
+          class="modal-content glass-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="download-model-title"
+          tabindex="-1"
+        >
+          <div class="modal-header">
+            <h2 id="download-model-title">Download models</h2>
+            <button
+              type="button"
+              class="icon-btn is-borderless"
+              aria-label="Close dialog"
+              @click="emit('close')"
             >
-              <input
-                v-model="modelSize"
-                type="radio"
-                name="model-size"
-                :value="option.value"
-                :data-autofocus="modelSize === option.value ? '' : undefined"
-              />
-              <span class="option-content">
-                <span class="option-name">{{ option.name }}</span>
-                <span class="option-description">{{ option.description }}</span>
-              </span>
-            </label>
-          </fieldset>
+              <X :size="20" aria-hidden="true" />
+            </button>
+          </div>
 
-          <p v-if="status === 'success'" class="alert alert-success" role="status">
-            <Check :size="18" aria-hidden="true" />
-            <span>Download started. You can close this dialog.</span>
-          </p>
+          <div class="modal-body">
+            <p class="description">
+              Pre-download the SeamlessM4T v2 weights into the local cache so the first translation
+              starts immediately.
+            </p>
 
-          <p v-else-if="status === 'error'" class="alert alert-danger" role="alert">
-            <AlertCircle :size="18" aria-hidden="true" />
-            <span>{{ error }}</span>
-          </p>
-        </div>
+            <fieldset class="model-options">
+              <legend class="form-label">Model size</legend>
+              <label
+                v-for="option in MODEL_OPTIONS"
+                :key="option.value"
+                class="model-option"
+                :class="{ 'is-selected': modelSize === option.value }"
+              >
+                <input
+                  v-model="modelSize"
+                  type="radio"
+                  name="model-size"
+                  :value="option.value"
+                  :data-autofocus="modelSize === option.value ? '' : undefined"
+                />
+                <span class="option-content">
+                  <span class="option-name">{{ option.name }}</span>
+                  <span class="option-description">{{ option.description }}</span>
+                </span>
+              </label>
+            </fieldset>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="emit('close')">Cancel</button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="status === 'downloading' || status === 'success'"
-            :aria-busy="status === 'downloading'"
-            @click="startDownload"
-          >
-            <span v-if="status === 'downloading'" class="spinner spinner-sm" aria-hidden="true"></span>
-            <Download v-else :size="18" aria-hidden="true" />
-            {{ status === 'downloading' ? 'Starting…' : 'Start download' }}
-          </button>
+            <p v-if="status === 'success'" class="alert alert-success" role="status">
+              <Check :size="18" aria-hidden="true" />
+              <span>Download started. You can close this dialog.</span>
+            </p>
+
+            <p v-else-if="status === 'error'" class="alert alert-danger" role="alert">
+              <AlertCircle :size="18" aria-hidden="true" />
+              <span>{{ error }}</span>
+            </p>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="emit('close')">Cancel</button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="status === 'downloading' || status === 'success'"
+              :aria-busy="status === 'downloading'"
+              @click="startDownload"
+            >
+              <span v-if="status === 'downloading'" class="spinner spinner-sm" aria-hidden="true"></span>
+              <Download v-else :size="18" aria-hidden="true" />
+              {{ status === 'downloading' ? 'Starting…' : 'Start download' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  </Transition>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>

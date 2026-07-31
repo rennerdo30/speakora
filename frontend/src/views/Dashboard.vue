@@ -449,9 +449,14 @@ const isPausable = (status: string) => ACTIVE_JOB_STATUSES.includes(status as ne
   font-variant-numeric: tabular-nums;
 }
 
+/* Kept as a table cell so the row's bottom border stays aligned; the icon
+   buttons are inline-flex already. */
 .actions-cell {
-  display: flex;
-  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.actions-cell .icon-btn + .icon-btn {
+  margin-left: var(--space-2);
 }
 
 .skeleton-rows {
