@@ -1,52 +1,63 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue'
-import { useJobStore } from '../stores/jobStore'
+import { computed, ref, onMounted, watch, onUnmounted } from 'vue'
+import { useJobStore, type Job } from '../stores/jobStore'
 import { useSystemStore } from '../stores/systemStore'
-import { Plus, Play, Pause, X, RefreshCw, Cpu, Activity, Clock, Trash2, ExternalLink } from 'lucide-vue-next'
+import {
+  Plus,
+  Play,
+  Pause,
+  X,
+  RefreshCw,
+  Cpu,
+  Activity,
+  Clock,
+  ExternalLink,
+  Inbox,
+  AlertTriangle
+} from 'lucide-vue-next'
 import NewJobModal from '../components/NewJobModal.vue'
 import JobDetails from '../components/JobDetails.vue'
-import DownloadModelModal from '../components/DownloadModelModal.vue'
 import SystemMonitor from '../components/SystemMonitor.vue'
 import { JobWebSocket } from '../utils/websocket'
+import {
+  ACTIVE_JOB_STATUSES,
+  JOB_LIST_POLL_MS,
+  SKELETON_ROW_COUNT,
+  TERMINAL_JOB_STATUSES
+} from '../constants'
+import { fileNameOf, formatCount, formatPercent } from '../utils/format'
 
 const jobStore = useJobStore()
 const systemStore = useSystemStore()
 
 const showNewJobModal = ref(false)
-const showDownloadModal = ref(false)
 const selectedJobId = ref<string | null>(null)
 const showDetailsModal = ref(false)
-const detailsRef = ref<any>(null)
 const activeWebSockets = ref<Map<string, JobWebSocket>>(new Map())
+let pollTimer: ReturnType<typeof setInterval> | undefined
+
+/** True only for the very first load, when there is nothing to show yet. */
+const isInitialLoad = computed(() => jobStore.loading && jobStore.jobs.length === 0)
 
 const openDetails = (id: string) => {
   selectedJobId.value = id
   showDetailsModal.value = true
 }
 
-watch(showDetailsModal, (newVal) => {
-  if (newVal && detailsRef.value) {
-    detailsRef.value.fetchJobDetails()
-  }
-})
+const cancelJob = async (job: Job) => {
+  const name = fileNameOf(job.input_file)
+  if (!confirm(`Cancel the translation of "${name}"?`)) return
 
-const cancelJob = async (id: string) => {
-  if (confirm('Are you sure you want to cancel this job?')) {
-    try {
-      await jobStore.cancelJob(id)
-      // Disconnect WebSocket if exists
-      const ws = activeWebSockets.value.get(id)
-      if (ws) {
-        ws.disconnect()
-        activeWebSockets.value.delete(id)
-      }
-    } catch (err) {
-      console.error('Failed to cancel job', err)
-    }
+  try {
+    await jobStore.cancelJob(job.id)
+    activeWebSockets.value.get(job.id)?.disconnect()
+    activeWebSockets.value.delete(job.id)
+  } catch (err) {
+    console.error('Failed to cancel job', err)
   }
 }
 
-const toggleJobStatus = async (job: any) => {
+const toggleJobStatus = async (job: Job) => {
   try {
     if (job.status === 'paused') {
       await jobStore.resumeJob(job.id)
@@ -54,257 +65,428 @@ const toggleJobStatus = async (job: any) => {
       await jobStore.pauseJob(job.id)
     }
   } catch (err) {
-    console.error(`Failed to toggle job status`, err)
+    console.error('Failed to toggle job status', err)
   }
 }
 
 const setupJobWebSocket = (jobId: string) => {
-  // Don't setup if already exists or job is completed/failed
   if (activeWebSockets.value.has(jobId)) return
-  
-  const job = jobStore.jobs.find(j => j.id === jobId)
-  if (!job || ['completed', 'failed'].includes(job.status)) return
-  
+
+  const job = jobStore.jobs.find((candidate) => candidate.id === jobId)
+  if (!job || TERMINAL_JOB_STATUSES.includes(job.status as never)) return
+
   const ws = new JobWebSocket(jobId)
+
   ws.on('progress', (data) => {
-    // Update job progress in store
-    const job = jobStore.jobs.find(j => j.id === jobId)
-    if (job) {
-      job.progress_percent = data.progress_percent || 0
-      job.status = data.status || job.status
+    const target = jobStore.jobs.find((candidate) => candidate.id === jobId)
+    if (target) {
+      target.progress_percent = data.progress_percent || 0
+      target.status = data.status || target.status
     }
   })
-  
+
   ws.on('status', (data) => {
     if (data.final) {
-      // Job completed, refresh list and disconnect
       jobStore.fetchJobs()
       ws.disconnect()
       activeWebSockets.value.delete(jobId)
     }
   })
-  
+
   ws.connect()
   activeWebSockets.value.set(jobId, ws)
 }
 
+watch(
+  () => jobStore.jobs,
+  (jobs) => {
+    jobs.forEach((job) => {
+      if (ACTIVE_JOB_STATUSES.includes(job.status as never)) setupJobWebSocket(job.id)
+    })
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
   jobStore.fetchJobs()
   systemStore.fetchInfo()
-  
-  // Refresh jobs every 3 seconds
-  const interval = setInterval(() => {
-    jobStore.fetchJobs()
-  }, 3000)
-  
-  // Setup WebSockets for active jobs
-  watch(() => jobStore.jobs, (jobs) => {
-    jobs.forEach(job => {
-      if (['queued', 'running', 'paused'].includes(job.status)) {
-        setupJobWebSocket(job.id)
-      }
-    })
-  }, { immediate: true })
-  
-  onUnmounted(() => {
-    clearInterval(interval)
-    // Cleanup all WebSockets
-    activeWebSockets.value.forEach(ws => ws.disconnect())
-    activeWebSockets.value.clear()
-  })
+  pollTimer = setInterval(() => jobStore.fetchJobs(), JOB_LIST_POLL_MS)
 })
 
-const getStatusBadgeClass = (status: string) => {
-  return `badge badge-${status.toLowerCase()}`
-}
+onUnmounted(() => {
+  clearInterval(pollTimer)
+  activeWebSockets.value.forEach((ws) => ws.disconnect())
+  activeWebSockets.value.clear()
+})
+
+const activeDevice = computed(
+  () => systemStore.info?.available_devices?.[0]?.toUpperCase() || 'CPU'
+)
+
+const isPausable = (status: string) => ACTIVE_JOB_STATUSES.includes(status as never)
 </script>
 
 <template>
   <div class="dashboard fade-in">
-    <header class="header">
-      <div class="header-content">
+    <header class="page-header">
+      <div>
         <h1>Dashboard</h1>
-        <p class="text-secondary">Overview of your translation jobs</p>
+        <p class="page-subtitle">Overview of your translation jobs</p>
       </div>
-      <button class="btn btn-primary" @click="showNewJobModal = true">
-        <Plus :size="18" />
-        New Translation
+      <button
+        type="button"
+        class="btn btn-primary"
+        aria-haspopup="dialog"
+        @click="showNewJobModal = true"
+      >
+        <Plus :size="18" aria-hidden="true" />
+        New translation
       </button>
     </header>
 
     <SystemMonitor />
-    
-    <div class="stats-grid">
-      <div class="stat-card glass-card">
-        <div class="stat-icon cpu"><Cpu :size="24" /></div>
-        <div class="stat-info">
-          <span class="stat-label">Device</span>
-          <span class="stat-value">{{ systemStore.info?.available_devices?.[0]?.toUpperCase() || 'CPU' }}</span>
-        </div>
-      </div>
-      <div class="stat-card glass-card">
-        <div class="stat-icon activity"><Activity :size="24" /></div>
-        <div class="stat-info">
-          <span class="stat-label">Active Jobs</span>
-          <span class="stat-value">{{ jobStore.activeJobs.length }}</span>
-        </div>
-      </div>
-      <div class="stat-card glass-card">
-        <div class="stat-icon clock"><Clock :size="24" /></div>
-        <div class="stat-info">
-          <span class="stat-label">Total Jobs</span>
-          <span class="stat-value">{{ jobStore.jobs.length }}</span>
-        </div>
-      </div>
-    </div>
 
-    <div class="section glass-card">
+    <ul class="stats-grid">
+      <li class="stat-card glass-card">
+        <span class="stat-icon is-primary"><Cpu :size="22" aria-hidden="true" /></span>
+        <span class="stat-info">
+          <span class="stat-label">Device</span>
+          <span class="stat-value">{{ activeDevice }}</span>
+        </span>
+      </li>
+      <li class="stat-card glass-card">
+        <span class="stat-icon is-secondary"><Activity :size="22" aria-hidden="true" /></span>
+        <span class="stat-info">
+          <span class="stat-label">Active jobs</span>
+          <span class="stat-value">{{ formatCount(jobStore.activeJobs.length) }}</span>
+        </span>
+      </li>
+      <li class="stat-card glass-card">
+        <span class="stat-icon is-success"><Clock :size="22" aria-hidden="true" /></span>
+        <span class="stat-info">
+          <span class="stat-label">Total jobs</span>
+          <span class="stat-value">{{ formatCount(jobStore.jobs.length) }}</span>
+        </span>
+      </li>
+    </ul>
+
+    <section class="section glass-card" aria-labelledby="recent-jobs-heading">
       <div class="section-header">
-        <h2>Recent Jobs</h2>
-        <button class="btn btn-secondary btn-sm" @click="jobStore.fetchJobs()">
-          <RefreshCw :size="14" :class="{ 'spin': jobStore.loading }" />
+        <h2 id="recent-jobs-heading">Recent jobs</h2>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          :disabled="jobStore.loading"
+          @click="jobStore.fetchJobs()"
+        >
+          <RefreshCw :size="14" :class="{ spin: jobStore.loading }" aria-hidden="true" />
           Refresh
         </button>
       </div>
-      <div class="table-container">
-        <table>
+
+      <p v-if="jobStore.error" class="alert alert-danger" role="alert">
+        <AlertTriangle :size="18" aria-hidden="true" />
+        <span>{{ jobStore.error }}</span>
+      </p>
+
+      <!-- First load: placeholder rows keep the layout stable. -->
+      <div v-if="isInitialLoad" class="skeleton-rows">
+        <div
+          v-for="row in SKELETON_ROW_COUNT"
+          :key="row"
+          class="skeleton skeleton-row"
+          aria-hidden="true"
+        ></div>
+        <p class="sr-only" role="status">Loading jobs…</p>
+      </div>
+
+      <div v-else-if="jobStore.jobs.length === 0" class="empty-state">
+        <span class="empty-state-icon"><Inbox :size="22" aria-hidden="true" /></span>
+        <p class="empty-state-title">No translation jobs yet</p>
+        <p class="empty-state-body">
+          Queue your first file and its progress, logs and output will appear here.
+        </p>
+        <button
+          type="button"
+          class="btn btn-primary"
+          aria-haspopup="dialog"
+          @click="showNewJobModal = true"
+        >
+          <Plus :size="18" aria-hidden="true" />
+          New translation
+        </button>
+      </div>
+
+      <div v-else class="table-container">
+        <table class="data-table">
+          <caption class="sr-only">
+            Recent translation jobs, newest first
+          </caption>
           <thead>
             <tr>
-              <th>Status</th>
-              <th>Input File</th>
-              <th>Language</th>
-              <th>Progress</th>
-              <th>Actions</th>
+              <th scope="col">Status</th>
+              <th scope="col">Input file</th>
+              <th scope="col">Language</th>
+              <th scope="col">Progress</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="job in jobStore.jobs" :key="job.id">
-              <td>
-                <span :class="getStatusBadgeClass(job.status)">{{ job.status }}</span>
+              <td data-label="Status">
+                <span :class="`badge badge-${job.status.toLowerCase()}`">{{ job.status }}</span>
               </td>
-              <td class="file-cell" :title="job.input_file">
-                {{ job.input_file.split('/').pop() }}
+              <td data-label="File" class="file-cell">
+                <span :title="job.input_file">{{ fileNameOf(job.input_file) }}</span>
               </td>
-              <td>{{ job.target_lang.toUpperCase() }}</td>
-              <td>
-                <div class="progress-bar-container">
-                  <div class="progress-bar" :style="{ width: job.progress_percent + '%' }"></div>
-                  <span class="progress-text">{{ Math.round(job.progress_percent) }}%</span>
+              <td data-label="Language">{{ job.target_lang.toUpperCase() }}</td>
+              <td data-label="Progress">
+                <div class="progress">
+                  <div
+                    class="meter"
+                    role="progressbar"
+                    :aria-valuenow="Math.round(job.progress_percent)"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    :aria-label="`Progress for ${fileNameOf(job.input_file)}`"
+                  >
+                    <div class="meter-fill" :style="{ width: `${job.progress_percent}%` }"></div>
+                  </div>
+                  <span class="progress-value">{{ formatPercent(job.progress_percent) }}</span>
                 </div>
               </td>
-              <td class="actions-cell">
-                <button 
-                  v-if="job.status === 'running' || job.status === 'paused' || job.status === 'queued'" 
-                  class="action-btn" 
+              <td class="actions-cell is-stacked-full">
+                <button
+                  v-if="isPausable(job.status)"
+                  type="button"
+                  class="icon-btn"
+                  :aria-label="job.status === 'paused' ? 'Resume job' : 'Pause job'"
                   :title="job.status === 'paused' ? 'Resume' : 'Pause'"
                   @click="toggleJobStatus(job)"
                 >
-                  <Pause v-if="job.status === 'running'" :size="16" />
-                  <Play v-else :size="16" />
+                  <Pause v-if="job.status === 'running'" :size="16" aria-hidden="true" />
+                  <Play v-else :size="16" aria-hidden="true" />
                 </button>
-                <button class="action-btn" title="View Details" @click="openDetails(job.id)">
-                  <ExternalLink :size="16" />
+                <button
+                  type="button"
+                  class="icon-btn"
+                  aria-label="View job details"
+                  title="View details"
+                  aria-haspopup="dialog"
+                  @click="openDetails(job.id)"
+                >
+                  <ExternalLink :size="16" aria-hidden="true" />
                 </button>
-                <button class="action-btn delete" title="Cancel" @click="cancelJob(job.id)">
-                  <X :size="16" />
+                <button
+                  type="button"
+                  class="icon-btn is-danger"
+                  aria-label="Cancel job"
+                  title="Cancel"
+                  @click="cancelJob(job)"
+                >
+                  <X :size="16" aria-hidden="true" />
                 </button>
               </td>
-            </tr>
-            <tr v-if="jobStore.jobs.length === 0">
-              <td colspan="5" class="empty-state">No jobs found. Start a new translation to see it here.</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
 
-    <NewJobModal 
-      :show="showNewJobModal" 
+    <NewJobModal
+      :show="showNewJobModal"
       @close="showNewJobModal = false"
       @submitted="jobStore.fetchJobs()"
     />
 
     <JobDetails
-      ref="detailsRef"
       :show="showDetailsModal"
       :jobId="selectedJobId"
       @close="showDetailsModal = false"
-    />
-
-    <DownloadModelModal
-      :show="showDownloadModal"
-      @close="showDownloadModal = false"
     />
   </div>
 </template>
 
 <style scoped>
-.dashboard { padding: 10px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 32px; }
-.stat-card { padding: 24px; display: flex; align-items: center; gap: 16px; }
-.stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.stat-icon.cpu { background: rgba(59, 130, 246, 0.1); color: var(--primary-color); }
-.stat-icon.activity { background: rgba(139, 92, 246, 0.1); color: var(--secondary-color); }
-.stat-icon.clock { background: rgba(16, 185, 129, 0.1); color: var(--accent-color); }
-.stat-info { display: flex; flex-direction: column; }
-.stat-label { font-size: 0.8125rem; color: var(--text-muted); }
-.stat-value { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); }
-.section { padding: 24px; }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-.table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-table { width: 100%; border-collapse: collapse; min-width: 600px; }
-th { text-align: left; padding: 12px 16px; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color); }
-td { padding: 16px; border-bottom: 1px solid var(--border-color); font-size: 0.875rem; }
-.file-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.progress-bar-container { width: 120px; height: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; position: relative; }
-.progress-bar { height: 100%; background: linear-gradient(90deg, var(--primary-color), var(--secondary-color)); border-radius: 4px; }
-.progress-text { position: absolute; right: -35px; top: -4px; font-size: 0.75rem; color: var(--text-secondary); }
-.actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
-.action-btn { background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; flex-shrink: 0; }
-.action-btn:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--text-muted); }
-.action-btn.delete:hover { background: rgba(239, 68, 68, 0.1); color: #f87171; border-color: rgba(239, 68, 68, 0.2); }
-.empty-state { text-align: center; color: var(--text-muted); padding: 40px !important; }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.spin { animation: spin 1s linear infinite; }
-
-/* Mobile Responsive */
-@media (max-width: 768px) {
-  .dashboard { padding: 8px; }
-  .header { margin-bottom: 24px; }
-  .header h1 { font-size: 1.5rem; }
-  .stats-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 24px; }
-  .stat-card { padding: 16px; }
-  .stat-icon { width: 40px; height: 40px; }
-  .stat-value { font-size: 1.125rem; }
-  .section { padding: 16px; }
-  .section-header h2 { font-size: 1.125rem; }
-  th, td { padding: 10px 12px; font-size: 0.8125rem; }
-  .progress-bar-container { width: 80px; }
-  .progress-text { right: -30px; font-size: 0.6875rem; }
-  .action-btn { width: 28px; height: 28px; }
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
-@media (max-width: 480px) {
-  .dashboard { padding: 6px; }
-  .header { margin-bottom: 16px; }
-  .header h1 { font-size: 1.25rem; }
-  .header p { font-size: 0.8125rem; }
-  .stats-grid { gap: 8px; }
-  .stat-card { padding: 12px; gap: 12px; }
-  .stat-icon { width: 36px; height: 36px; }
-  .stat-label { font-size: 0.75rem; }
-  .stat-value { font-size: 1rem; }
-  .section { padding: 12px; }
-  .section-header { margin-bottom: 12px; }
-  .section-header h2 { font-size: 1rem; }
-  table { min-width: 500px; }
-  th, td { padding: 8px; font-size: 0.75rem; }
-  .file-cell { max-width: 120px; }
-  .progress-bar-container { width: 60px; }
-  .progress-text { right: -25px; font-size: 0.625rem; }
-  .actions-cell { gap: 4px; }
-  .action-btn { width: 24px; height: 24px; }
-  .empty-state { padding: 24px !important; font-size: 0.8125rem; }
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.page-subtitle {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: var(--space-4);
+  list-style: none;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  transition: border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.stat-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+
+.stat-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-lg);
+}
+
+.stat-icon.is-primary {
+  background: var(--primary-soft);
+  color: var(--primary-color);
+}
+
+.stat-icon.is-secondary {
+  background: var(--secondary-soft);
+  color: var(--secondary-color);
+}
+
+.stat-icon.is-success {
+  background: var(--success-soft);
+  color: var(--success-color);
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stat-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.stat-value {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.section-header h2 {
+  font-size: var(--text-xl);
+}
+
+.table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-inline: calc(var(--space-6) * -1);
+  padding-inline: var(--space-6);
+}
+
+.data-table {
+  min-width: 40rem;
+}
+
+.file-cell span {
+  display: block;
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 8rem;
+}
+
+.progress .meter {
+  width: 7rem;
+}
+
+.progress-value {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Kept as a table cell so the row's bottom border stays aligned; the icon
+   buttons are inline-flex already. */
+.actions-cell {
+  white-space: nowrap;
+}
+
+.actions-cell .icon-btn + .icon-btn {
+  margin-left: var(--space-2);
+}
+
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+}
+
+.skeleton-row {
+  height: 2.75rem;
+}
+
+@media (max-width: 640px) {
+  .section {
+    padding: var(--space-4);
+  }
+
+  .table-container {
+    margin-inline: calc(var(--space-4) * -1);
+    padding-inline: 0;
+    overflow-x: visible;
+  }
+
+  .data-table {
+    min-width: 0;
+  }
+
+  .file-cell span {
+    max-width: none;
+  }
 }
 </style>
