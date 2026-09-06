@@ -9,7 +9,7 @@ import logging
 import uuid
 import time
 from collections import defaultdict
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from .config import Config
 from .job_queue import JobQueue, JobStatus, Checkpoint
 from .translator import SeamlessTranslator
@@ -430,18 +430,22 @@ npm run build</code></pre>
 
     @app.patch("/api/system/config")
     async def update_config(new_cfg: dict):
-        # Update current config object
-        # This is basic, for real production we'd use pydantic validation better
+        # Validate a complete candidate before mutating the live configuration.
+        candidate = cfg.model_dump()
         for key, value in new_cfg.items():
-            if hasattr(cfg, key):
-                current_attr = getattr(cfg, key)
-                if isinstance(current_attr, BaseModel) and isinstance(value, dict):
-                    for sub_key, sub_value in value.items():
-                        if hasattr(current_attr, sub_key):
-                            setattr(current_attr, sub_key, sub_value)
-                else:
-                    setattr(cfg, key, value)
-        return cfg.dict()
+            if key in candidate:
+                if not isinstance(value, dict):
+                    raise HTTPException(
+                        status_code=422, detail=f"{key} must be an object"
+                    )
+                candidate[key].update(value)
+        try:
+            validated = Config(**candidate)
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        for key in candidate:
+            setattr(cfg, key, getattr(validated, key))
+        return cfg.model_dump()
 
     @app.get("/api/system/info")
     async def system_info():

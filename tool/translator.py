@@ -258,7 +258,11 @@ class SeamlessTranslator:
         if len(translated_audio_pieces) > 0:
             final_audio = np.concatenate(translated_audio_pieces)
         else:
-            final_audio = np.array([])
+            return {
+                "source_file": str(input_file),
+                "status": "failed",
+                "error": "No translated audio was generated",
+            }
 
         translated_text = " ".join(translated_text_pieces)
         translated_audio = torch.from_numpy(final_audio)

@@ -1622,6 +1622,12 @@ retain the shared checkpoint timer, and only the primary worker resets stale
 running jobs at startup.
 
 Run tests with `python -m pytest` so the local `tool` package is importable.
-The current local suite passes 69 tests with 78.28% statement coverage; the
-existing 100% coverage gate remains enabled and requires further test coverage.
+The local suite passes 110 tests with 100% statement coverage, meeting the
+existing coverage gate. Recovery tests cover streaming failures, checkpoint
+errors, decoder fallbacks, device reporting, and worker shutdown.
+
+Configuration updates validate the complete candidate before changing live
+settings. Invalid updates return HTTP 422 and preserve the previous configuration.
+Translations that produce no audio return a failure result; workers mark failed
+translation results as failed jobs instead of reporting completion.
 Black and flake8 checks pass after formatting the Python sources and tests.

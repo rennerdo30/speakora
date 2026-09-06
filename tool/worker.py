@@ -116,7 +116,7 @@ class Worker:
                             # Use input file as reference if no separate reference provided
                             reference_audio = input_file
 
-                    self.translator.translate_audio(
+                    result = self.translator.translate_audio(
                         input_file,
                         job.target_lang,
                         job.source_lang or "auto",
@@ -124,6 +124,9 @@ class Worker:
                         reference_audio=reference_audio,
                         progress_callback=progress_callback,
                     )
+
+                    if isinstance(result, dict) and result.get("status") == "failed":
+                        raise RuntimeError(result.get("error", "Translation failed"))
 
                     # Calculate processing time
                     processing_time = time_module.time() - start_time
