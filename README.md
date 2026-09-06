@@ -1,22 +1,33 @@
-# SeamlessM4T v2 Speech-to-Speech Translation System
+<img src="./docs/public/logo.svg" alt="" width="72" height="72" />
 
-A production-grade, state-of-the-art speech-to-speech translation (S2ST) system powered by Meta's SeamlessM4T v2. This tool provides multiple interfaces for high-quality audio translation, including a CLI, a modern Web Dashboard, and a Browser Extension for real-time video translation.
+# Speakora
 
-![Transwave Logo](./extension/icons/icon128.png)
+Speech-to-speech translation powered by Meta's **SeamlessM4T v2**. Speakora translates spoken
+audio from one language into another — optionally keeping the original speaker's voice — and ships
+three ways to drive it: a CLI, a web dashboard, and a browser extension that dubs videos as they
+play.
+
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![Vue 3](https://img.shields.io/badge/vue-3-42b883)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
+
+**Contents** · [Features](#features) · [Installation](#installation) · [Usage](#usage) ·
+[Web dashboard](#web-dashboard) · [Docker](#docker-support) · [Configuration](#configuration) ·
+[API](#api-endpoints) · [Development](#development) · [Troubleshooting](#troubleshooting)
 
 ## Features
 
-- **High Quality S2ST**: Uses SeamlessM4T v2 for industry-leading translation quality.
-- **Expressive Mode**: Preserves the original speaker's vocal characteristics (prosody, tone).
-- **Multiple Interfaces**:
-  - **CLI**: Robust command-line tool for batch processing.
-  - **Web GUI**: Beautiful Vue.js dashboard for job management and monitoring.
-  - **Browser Extension**: Real-time overlay translation for any video playing in your browser.
-- **Background Worker**: SQLite-backed job queue for asynchronous processing.
-- **Device Management**: Automatic GPU acceleration (CUDA/MPS) with CPU fallback.
-- **Zero-Shot Voice Preservation**: Maintain speaker identity across languages.
-- **Resource Efficient**: Smart chunking for long-form content conversion without high RAM usage.
-- **Smart Streaming**: Integrated VAD (Voice Activity Detection) to skip silence during real-time translation.
+- **High-quality S2ST** — SeamlessM4T v2 for translation and speech synthesis in one pass.
+- **Expressive mode** — preserves the original speaker's prosody and tone; zero-shot voice
+  preservation keeps speaker identity across languages.
+- **Three interfaces**
+  - **CLI** for scripted and batch processing.
+  - **Web dashboard** (Vue 3 + TypeScript) for queueing, monitoring and inspecting jobs.
+  - **Browser extension** that overlays translated audio on any playing video.
+- **Background workers** — SQLite-backed job queue with pause, resume and checkpoint recovery.
+- **Automatic device selection** — CUDA or Apple MPS when available, CPU fallback otherwise.
+- **Resource efficient** — smart chunking keeps memory flat on long recordings.
+- **Smart streaming** — voice-activity detection skips silence during real-time translation.
 
 ## Installation
 
@@ -30,8 +41,8 @@ A production-grade, state-of-the-art speech-to-speech translation (S2ST) system 
 
 ```bash
 # Clone the repository
-git clone https://github.com/rennerdo30/video-translate-direct.git
-cd video-translate-direct
+git clone https://github.com/rennerdo30/speakora.git
+cd speakora
 
 # Option 1: All-in-one startup (recommended)
 # Updates venv, builds frontend, and starts server
@@ -49,8 +60,8 @@ source venv/bin/activate
 
 ```batch
 # Clone the repository
-git clone https://github.com/rennerdo30/video-translate-direct.git
-cd video-translate-direct
+git clone https://github.com/rennerdo30/speakora.git
+cd speakora
 
 # Option 1: All-in-one startup (recommended)
 # Updates venv, builds frontend, and starts server
@@ -137,6 +148,21 @@ python -m tool.main download --model-size large
 3. **Access the dashboard:**
    - Open `http://localhost:5000` in your browser
    - The frontend is served by the FastAPI backend
+
+The dashboard gives you:
+
+- **Live job table** with status badges, progress meters and pause / resume / cancel actions,
+  updated over WebSocket and polled as a fallback.
+- **System monitor** for GPU memory, CPU, RAM and queue depth, with meters that turn amber and red
+  as utilisation climbs.
+- **Job details** showing timings, an estimated time remaining, checkpoint history and a searchable
+  live log tail.
+- **History** with search, status filtering and pagination.
+- **Settings** for model, audio, path and logging options.
+- **Light and dark themes** — it follows your operating-system preference and remembers your choice.
+- **Keyboard and screen-reader support** — visible focus rings, labelled controls, `Esc` to close
+  dialogs, and animations that respect `prefers-reduced-motion`.
+- **Responsive layout** — the sidebar becomes a top bar and tables stack into cards on phones.
 
 ### Browser Extension
 
@@ -259,8 +285,21 @@ open htmlcov/index.html
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev          # Vite dev server on :3000, proxies /api to :5000
+npm run type-check   # vue-tsc
+npm run build        # production bundle into frontend/dist
+npm run preview      # serve the production bundle locally
 ```
+
+The UI is plain CSS — no framework. Colours, spacing, type sizes, radii, durations and z-indexes
+are CSS custom properties declared in `frontend/src/index.css`, together with the shared primitives
+(`.btn`, `.icon-btn`, `.badge`, `.form-input`, `.alert`, `.meter`, `.data-table`, `.empty-state`,
+`.skeleton`). Add a token there rather than hard-coding a value in a component. Non-visual constants
+(poll intervals, page sizes, thresholds) live in `frontend/src/constants.ts`.
+
+Themes are driven by `<html data-theme="light|dark">`: the dark palette is the `:root` default and
+`[data-theme='light']` overrides the semantic colour tokens. A tiny inline script in `index.html`
+applies the stored or system theme before first paint, and `useTheme()` keeps it in sync.
 
 ### Code Quality
 
@@ -278,7 +317,7 @@ mypy tool/
 ## Architecture
 
 - **Backend**: FastAPI (Python) with SQLite job queue
-- **Frontend**: Vue.js 3 + TypeScript + Pinia
+- **Frontend**: Vue 3 + TypeScript + Pinia + Vite, styled with plain CSS custom properties
 - **Extension**: Manifest v3 with Web Audio API
 - **Translation**: SeamlessM4T v2 (Meta)
 - **GPU Support**: Metal (macOS), CUDA (Linux/Windows), ROCm/HIP (Linux/Windows)

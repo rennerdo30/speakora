@@ -1613,3 +1613,21 @@ All three phases have been fully implemented:
 **END OF SPECIFICATION DOCUMENT**
 
 This document serves as the complete technical reference for the video-translate-direct project. All features described herein have been implemented and are production-ready.
+
+## CI maintenance (September 2026)
+
+The translation stream is registered as a WebSocket route. Its authentication
+and context-reset tests exercise WebSocket connections. Worker progress callbacks
+retain the shared checkpoint timer, and only the primary worker resets stale
+running jobs at startup.
+
+Run tests with `python -m pytest` so the local `tool` package is importable.
+The local suite passes 110 tests with 100% statement coverage, meeting the
+existing coverage gate. Recovery tests cover streaming failures, checkpoint
+errors, decoder fallbacks, device reporting, and worker shutdown.
+
+Configuration updates validate the complete candidate before changing live
+settings. Invalid updates return HTTP 422 and preserve the previous configuration.
+Translations that produce no audio return a failure result; workers mark failed
+translation results as failed jobs instead of reporting completion.
+Black and flake8 checks pass after formatting the Python sources and tests.

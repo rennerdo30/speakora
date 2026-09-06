@@ -1,20 +1,40 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { Save, RefreshCw, Cpu, Folder, Radio, Mic2, ShieldCheck, Zap } from 'lucide-vue-next'
+import { Save, Cpu, Folder, Mic2, ShieldCheck, Zap, AlertTriangle, RefreshCw } from 'lucide-vue-next'
+import { TOAST_DURATION_MS } from '../constants'
+
+type ToastType = 'success' | 'error'
+
+const SAMPLE_RATES = [
+  { value: 16000, label: '16 kHz (standard)' },
+  { value: 24000, label: '24 kHz' },
+  { value: 44100, label: '44.1 kHz (high fidelity)' },
+  { value: 48000, label: '48 kHz' }
+]
 
 const config = ref<any>(null)
 const loading = ref(true)
 const saving = ref(false)
-const message = ref({ text: '', type: '' })
+const loadError = ref('')
+const toast = ref<{ text: string; type: ToastType } | null>(null)
+let toastTimer: ReturnType<typeof setTimeout> | undefined
+
+const showToast = (text: string, type: ToastType) => {
+  clearTimeout(toastTimer)
+  toast.value = { text, type }
+  toastTimer = setTimeout(() => (toast.value = null), TOAST_DURATION_MS)
+}
 
 const fetchConfig = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await axios.get('/api/system/config')
     config.value = res.data
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Failed to fetch config', err)
+    loadError.value = 'Could not load the configuration. Check that the backend is running.'
   } finally {
     loading.value = false
   }
@@ -22,13 +42,12 @@ const fetchConfig = async () => {
 
 const saveConfig = async () => {
   saving.value = true
-  message.value = { text: '', type: '' }
   try {
     await axios.patch('/api/system/config', config.value)
-    message.value = { text: 'Settings saved successfully!', type: 'success' }
-    setTimeout(() => { message.value = { text: '', type: '' } }, 3000)
-  } catch (err) {
-    message.value = { text: 'Failed to save settings.', type: 'error' }
+    showToast('Settings saved.', 'success')
+  } catch (err: unknown) {
+    console.error('Failed to save config', err)
+    showToast('Could not save the settings.', 'error')
   } finally {
     saving.value = false
   }
@@ -39,191 +58,297 @@ onMounted(fetchConfig)
 
 <template>
   <div class="settings-view fade-in">
-    <header class="header">
-      <div class="header-content">
+    <header class="page-header">
+      <div>
         <h1>Settings</h1>
-        <p class="text-secondary">Configure your translation and system preferences</p>
+        <p class="page-subtitle">Configure translation, audio and system preferences</p>
       </div>
-      <button class="btn btn-primary" @click="saveConfig" :disabled="saving">
-        <Save :size="18" />
-        {{ saving ? 'Saving...' : 'Save Settings' }}
+      <button
+        type="button"
+        class="btn btn-primary"
+        :disabled="saving || loading || !config"
+        :aria-busy="saving"
+        @click="saveConfig"
+      >
+        <Save :size="18" aria-hidden="true" />
+        {{ saving ? 'Saving…' : 'Save settings' }}
       </button>
     </header>
 
     <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
+      <div class="spinner" aria-hidden="true"></div>
+      <p role="status">Loading configuration…</p>
+    </div>
+
+    <div v-else-if="loadError" class="glass-card error-state" role="alert">
+      <span class="empty-state-icon"><AlertTriangle :size="22" aria-hidden="true" /></span>
+      <p class="empty-state-title">Configuration unavailable</p>
+      <p class="empty-state-body">{{ loadError }}</p>
+      <button type="button" class="btn btn-secondary" @click="fetchConfig">
+        <RefreshCw :size="16" aria-hidden="true" />
+        Try again
+      </button>
     </div>
 
     <div v-else-if="config" class="settings-grid">
-      <!-- Model Settings -->
-      <section class="settings-card glass-card">
+      <section class="settings-card glass-card" aria-labelledby="settings-model">
         <div class="card-header">
-          <Cpu :size="20" class="icon-primary" />
-          <h3>Model Configuration</h3>
+          <Cpu :size="20" class="icon-primary" aria-hidden="true" />
+          <h2 id="settings-model">Model</h2>
         </div>
         <div class="card-body">
           <div class="form-group">
-            <label>Model Size</label>
-            <select v-model="config.model.size" class="form-input">
-              <option value="small">Small (Fast)</option>
+            <label for="model-size">Model size</label>
+            <select id="model-size" v-model="config.model.size" class="form-input">
+              <option value="small">Small (fastest)</option>
               <option value="medium">Medium</option>
-              <option value="large">Large (High Quality)</option>
+              <option value="large">Large (highest quality)</option>
             </select>
+            <span class="hint">Larger models translate better but need more memory.</span>
           </div>
           <div class="form-group">
-            <label>Device</label>
-            <select v-model="config.model.device" class="form-input">
+            <label for="model-device">Device</label>
+            <select id="model-device" v-model="config.model.device" class="form-input">
               <option value="auto">Auto-detect</option>
               <option value="cuda">NVIDIA GPU (CUDA)</option>
-              <option value="mps">Mac GPU (MPS)</option>
+              <option value="mps">Apple GPU (MPS)</option>
               <option value="cpu">CPU</option>
             </select>
           </div>
-          <div class="checkbox-group">
-            <input type="checkbox" v-model="config.model.expressive" id="expressive" />
-            <label for="expressive">
-              <Zap :size="14" />
-              Expressive Mode (Voice Preservation)
+          <div class="checkbox-label">
+            <input id="model-expressive" v-model="config.model.expressive" type="checkbox" />
+            <label for="model-expressive">
+              <Zap :size="14" aria-hidden="true" />
+              Expressive mode (voice preservation)
             </label>
           </div>
         </div>
       </section>
 
-      <!-- Audio Settings -->
-      <section class="settings-card glass-card">
+      <section class="settings-card glass-card" aria-labelledby="settings-audio">
         <div class="card-header">
-          <Mic2 :size="20" class="icon-secondary" />
-          <h3>Audio Processing</h3>
+          <Mic2 :size="20" class="icon-secondary" aria-hidden="true" />
+          <h2 id="settings-audio">Audio processing</h2>
         </div>
         <div class="card-body">
           <div class="form-group">
-            <label>Target Sample Rate (Hz)</label>
-            <select v-model="config.audio.target_sample_rate" class="form-input">
-              <option :value="16000">16,000 (Standard)</option>
-              <option :value="24000">24,000</option>
-              <option :value="44100">44,100 (High Fidelity)</option>
-              <option :value="48000">48,000</option>
+            <label for="audio-sample-rate">Target sample rate</label>
+            <select
+              id="audio-sample-rate"
+              v-model="config.audio.target_sample_rate"
+              class="form-input"
+            >
+              <option v-for="rate in SAMPLE_RATES" :key="rate.value" :value="rate.value">
+                {{ rate.label }}
+              </option>
             </select>
           </div>
-          <div class="checkbox-group">
-            <input type="checkbox" v-model="config.audio.to_mono" id="to_mono" />
-            <label for="to_mono">Convert to Mono</label>
+          <div class="checkbox-label">
+            <input id="audio-mono" v-model="config.audio.to_mono" type="checkbox" />
+            <label for="audio-mono">Convert to mono</label>
           </div>
-          <div class="checkbox-group">
-            <input type="checkbox" v-model="config.audio.normalize" id="normalize" />
-            <label for="normalize">Normalize Volume</label>
-          </div>
-        </div>
-      </section>
-
-      <!-- Path Settings -->
-      <section class="settings-card glass-card">
-        <div class="card-header">
-          <Folder :size="20" class="icon-accent" />
-          <h3>Paths & Storage</h3>
-        </div>
-        <div class="card-body">
-          <div class="form-group">
-            <label>Input Directory</label>
-            <input type="text" v-model="config.paths.input_dir" class="form-input" />
-          </div>
-          <div class="form-group">
-            <label>Output Directory</label>
-            <input type="text" v-model="config.paths.output_dir" class="form-input" />
+          <div class="checkbox-label">
+            <input id="audio-normalize" v-model="config.audio.normalize" type="checkbox" />
+            <label for="audio-normalize">Normalise volume</label>
           </div>
         </div>
       </section>
 
-      <!-- Logging & Advanced -->
-      <section class="settings-card glass-card">
+      <section class="settings-card glass-card" aria-labelledby="settings-paths">
         <div class="card-header">
-          <ShieldCheck :size="20" class="icon-success" />
-          <h3>Advanced & Logging</h3>
+          <Folder :size="20" class="icon-accent" aria-hidden="true" />
+          <h2 id="settings-paths">Paths &amp; storage</h2>
         </div>
         <div class="card-body">
           <div class="form-group">
-            <label>Log Level</label>
-            <select v-model="config.logging.level" class="form-input">
-              <option value="DEBUG">Debug (Verbose)</option>
+            <label for="paths-input">Input directory</label>
+            <input
+              id="paths-input"
+              v-model="config.paths.input_dir"
+              type="text"
+              class="form-input"
+              spellcheck="false"
+            />
+          </div>
+          <div class="form-group">
+            <label for="paths-output">Output directory</label>
+            <input
+              id="paths-output"
+              v-model="config.paths.output_dir"
+              type="text"
+              class="form-input"
+              spellcheck="false"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-card glass-card" aria-labelledby="settings-advanced">
+        <div class="card-header">
+          <ShieldCheck :size="20" class="icon-success" aria-hidden="true" />
+          <h2 id="settings-advanced">Advanced &amp; logging</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="log-level">Log level</label>
+            <select id="log-level" v-model="config.logging.level" class="form-input">
+              <option value="DEBUG">Debug (verbose)</option>
               <option value="INFO">Info</option>
               <option value="WARNING">Warning</option>
               <option value="ERROR">Error</option>
             </select>
           </div>
-          <div class="checkbox-group">
-            <input type="checkbox" v-model="config.processing.resume_from_checkpoint" id="resume" />
-            <label for="resume">Resume from Checkpoint</label>
+          <div class="checkbox-label">
+            <input
+              id="resume-checkpoint"
+              v-model="config.processing.resume_from_checkpoint"
+              type="checkbox"
+            />
+            <label for="resume-checkpoint">Resume from checkpoint</label>
           </div>
         </div>
       </section>
     </div>
 
-    <div v-if="message.text" :class="['floating-message', message.type]">
-      {{ message.text }}
+    <!-- Live region so the save result is announced, not just shown. -->
+    <div class="toast-region" role="status" aria-live="polite">
+      <p v-if="toast" :class="['toast', toast.type]">{{ toast.text }}</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-.settings-view { padding: 10px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+.settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.page-subtitle {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+}
 
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--space-5);
+  align-items: start;
 }
 
-.settings-card { padding: 0; overflow: hidden; }
+.settings-card {
+  overflow: hidden;
+}
+
 .card-header {
-  padding: 16px 24px;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-.card-header h3 { font-size: 1rem; margin: 0; }
-.card-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
-
-.icon-primary { color: var(--primary-color); }
-.icon-secondary { color: var(--secondary-color); }
-.icon-accent { color: var(--accent-color); }
-.icon-success { color: #10b981; }
-
-.form-group { display: flex; flex-direction: column; gap: 8px; }
-.form-group label { font-size: 0.8125rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.form-input {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 10px 14px;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 0.9375rem;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.checkbox-group { display: flex; align-items: center; gap: 10px; cursor: pointer; }
-.checkbox-group input { width: 16px; height: 16px; cursor: pointer; }
-.checkbox-group label { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; color: var(--text-secondary); cursor: pointer; }
+.card-header h2 {
+  font-size: var(--text-lg);
+}
 
-.floating-message {
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+}
+
+.icon-primary {
+  color: var(--primary-color);
+}
+
+.icon-secondary {
+  color: var(--secondary-color);
+}
+
+.icon-accent {
+  color: var(--info-color);
+}
+
+.icon-success {
+  color: var(--success-color);
+}
+
+.checkbox-label label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-16) var(--space-6);
+  color: var(--text-muted);
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.toast-region {
   position: fixed;
-  bottom: 40px;
-  right: 40px;
-  padding: 16px 24px;
-  border-radius: 12px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-  z-index: 2000;
-  animation: slideUp 0.3s ease-out;
+  right: var(--page-gutter);
+  bottom: var(--page-gutter);
+  z-index: var(--z-toast);
+  pointer-events: none;
 }
-.floating-message.success { border-color: #10b981; color: #34d399; }
-.floating-message.error { border-color: #ef4444; color: #f87171; }
 
-@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-@keyframes spin { to { transform: rotate(360deg); } }
-.spinner { width: 40px; height: 40px; border: 3px solid var(--border-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; margin: 60px auto; }
+.toast {
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-md);
+  animation: slideUp var(--duration-base) var(--ease-out);
+}
+
+.toast.success {
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.toast.error {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 </style>

@@ -1,7 +1,7 @@
-import os
 import hashlib
 from pathlib import Path
 from typing import Union
+
 
 def calculate_checksum(file_path: Union[str, Path]) -> str:
     """Calculate SHA256 checksum of a file."""
@@ -11,11 +11,13 @@ def calculate_checksum(file_path: Union[str, Path]) -> str:
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
+
 def ensure_dir(path: Union[str, Path]) -> Path:
     """Ensure directory exists."""
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
     return path
+
 
 def format_size(size_bytes: int) -> str:
     """Format size in bytes to human readable string."""

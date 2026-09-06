@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import axios from 'axios'
-import { Download, Check, AlertCircle } from 'lucide-vue-next'
+import { Download, Check, AlertCircle, X } from 'lucide-vue-next'
+import { MODAL_AUTO_CLOSE_MS } from '../constants'
+import { useDialog } from '../composables/useDialog'
 
 const props = defineProps<{
   show: boolean
@@ -9,162 +11,209 @@ const props = defineProps<{
 
 const emit = defineEmits(['close'])
 
+const MODEL_OPTIONS = [
+  { value: 'small', name: 'Small', description: 'About 1.2 GB — fastest, lower quality' },
+  { value: 'medium', name: 'Medium', description: 'About 3.5 GB — balanced' },
+  { value: 'large', name: 'Large', description: 'About 10 GB — best quality' }
+]
+
 const modelSize = ref('large')
-const downloading = ref(false)
 const status = ref<'idle' | 'downloading' | 'success' | 'error'>('idle')
 const error = ref('')
 
+const { dialogRef } = useDialog(
+  () => props.show,
+  () => emit('close')
+)
+
 const startDownload = async () => {
-  downloading.value = true
   status.value = 'downloading'
   error.value = ''
-  
+
   try {
-    // This API call should trigger the backend download
-    // Since backend download might take long, we shouldn't block
-    // But for simplicity in this demo, we'll wait or use a background task
     await axios.post('/api/system/download', { model_size: modelSize.value })
     status.value = 'success'
     setTimeout(() => {
       emit('close')
       status.value = 'idle'
-    }, 2000)
+    }, MODAL_AUTO_CLOSE_MS)
   } catch (err: any) {
     status.value = 'error'
-    error.value = err.response?.data?.detail || 'Failed to start download.'
-  } finally {
-    downloading.value = false
+    error.value = err.response?.data?.detail || 'Could not start the download.'
   }
 }
 </script>
 
 <template>
-  <div v-if="show" class="modal-overlay" @click.self="emit('close')">
-    <div class="modal-content glass-card fade-in">
-      <div class="modal-header">
-        <h2>Download Models</h2>
-        <button class="close-btn" @click="emit('close')">
-          <X :size="20" />
-        </button>
-      </div>
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="show" class="modal-overlay" @click.self="emit('close')">
+        <div
+          ref="dialogRef"
+          class="modal-content glass-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="download-model-title"
+          tabindex="-1"
+        >
+          <div class="modal-header">
+            <h2 id="download-model-title">Download models</h2>
+            <button
+              type="button"
+              class="icon-btn is-borderless"
+              aria-label="Close dialog"
+              @click="emit('close')"
+            >
+              <X :size="20" aria-hidden="true" />
+            </button>
+          </div>
 
-      <div class="modal-body">
-        <p class="description">
-          Pre-download the SeamlessM4T v2 models to your local cache for faster startup.
-        </p>
+          <div class="modal-body">
+            <p class="description">
+              Pre-download the SeamlessM4T v2 weights into the local cache so the first translation
+              starts immediately.
+            </p>
 
-        <div class="form-group">
-          <label>Select Model Size</label>
-          <div class="model-options">
-            <label class="model-option" :class="{ active: modelSize === 'small' }">
-              <input type="radio" v-model="modelSize" value="small" />
-              <div class="option-content">
-                <span class="size-name">Small</span>
-                <span class="size-desc">~1.2GB - Faster, lower quality</span>
-              </div>
-            </label>
-            <label class="model-option" :class="{ active: modelSize === 'medium' }">
-              <input type="radio" v-model="modelSize" value="medium" />
-              <div class="option-content">
-                <span class="size-name">Medium</span>
-                <span class="size-desc">~3.5GB - Balanced</span>
-              </div>
-            </label>
-            <label class="model-option" :class="{ active: modelSize === 'large' }">
-              <input type="radio" v-model="modelSize" value="large" />
-              <div class="option-content">
-                <span class="size-name">Large</span>
-                <span class="size-desc">~10GB - Best quality</span>
-              </div>
-            </label>
+            <fieldset class="model-options">
+              <legend class="form-label">Model size</legend>
+              <label
+                v-for="option in MODEL_OPTIONS"
+                :key="option.value"
+                class="model-option"
+                :class="{ 'is-selected': modelSize === option.value }"
+              >
+                <input
+                  v-model="modelSize"
+                  type="radio"
+                  name="model-size"
+                  :value="option.value"
+                  :data-autofocus="modelSize === option.value ? '' : undefined"
+                />
+                <span class="option-content">
+                  <span class="option-name">{{ option.name }}</span>
+                  <span class="option-description">{{ option.description }}</span>
+                </span>
+              </label>
+            </fieldset>
+
+            <p v-if="status === 'success'" class="alert alert-success" role="status">
+              <Check :size="18" aria-hidden="true" />
+              <span>Download started. You can close this dialog.</span>
+            </p>
+
+            <p v-else-if="status === 'error'" class="alert alert-danger" role="alert">
+              <AlertCircle :size="18" aria-hidden="true" />
+              <span>{{ error }}</span>
+            </p>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="emit('close')">Cancel</button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="status === 'downloading' || status === 'success'"
+              :aria-busy="status === 'downloading'"
+              @click="startDownload"
+            >
+              <span v-if="status === 'downloading'" class="spinner spinner-sm" aria-hidden="true"></span>
+              <Download v-else :size="18" aria-hidden="true" />
+              {{ status === 'downloading' ? 'Starting…' : 'Start download' }}
+            </button>
           </div>
         </div>
-
-        <div v-if="status === 'success'" class="success-message">
-          <Check :size="18" />
-          Model download started successfully!
-        </div>
-        
-        <div v-if="status === 'error'" class="error-message">
-          <AlertCircle :size="18" />
-          {{ error }}
-        </div>
       </div>
-
-      <div class="modal-footer">
-        <button class="btn btn-secondary" @click="emit('close')">Cancel</button>
-        <button 
-          class="btn btn-primary" 
-          @click="startDownload"
-          :disabled="downloading || status === 'success'"
-        >
-          <Download :size="18" />
-          {{ downloading ? 'Downloading...' : 'Start Download' }}
-        </button>
-      </div>
-    </div>
-  </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
 .modal-overlay {
   position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  inset: 0;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  padding: var(--page-gutter);
+  background: var(--overlay-backdrop);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .modal-content {
-  width: 450px;
-  max-width: 95vw;
-  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  width: var(--modal-width-sm);
+  max-width: 100%;
+  max-height: calc(100vh - var(--page-gutter) * 2);
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.modal-content:focus {
+  outline: none;
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.modal-header h2 {
+  font-size: var(--text-xl);
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .description {
   color: var(--text-secondary);
-  font-size: 0.875rem;
-  margin-bottom: 24px;
+  font-size: var(--text-md);
 }
 
 .model-options {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
+  border: none;
+}
+
+.model-options legend {
+  margin-bottom: var(--space-3);
 }
 
 .model-option {
   display: flex;
   align-items: center;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface-raised);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--transition-colors);
 }
 
 .model-option:hover {
-  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
 }
 
-.model-option.active {
+.model-option:has(input:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.model-option.is-selected {
   border-color: var(--primary-color);
-  background: rgba(59, 130, 246, 0.05);
-}
-
-.model-option input {
-  margin-right: 16px;
+  background: var(--primary-soft);
 }
 
 .option-content {
@@ -172,44 +221,59 @@ const startDownload = async () => {
   flex-direction: column;
 }
 
-.size-name {
-  font-weight: 600;
+.option-name {
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
 }
 
-.size-desc {
-  font-size: 0.75rem;
+.option-description {
+  font-size: var(--text-xs);
   color: var(--text-muted);
-}
-
-.success-message {
-  margin-top: 20px;
-  padding: 12px;
-  background: rgba(16, 185, 129, 0.1);
-  color: #34d399;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
-}
-
-.error-message {
-  margin-top: 20px;
-  padding: 12px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #f87171;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 32px;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.btn-primary .spinner {
+  border-color: currentColor;
+  border-top-color: transparent;
+}
+
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.modal-enter-active .modal-content,
+.modal-leave-active .modal-content {
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from .modal-content,
+.modal-leave-to .modal-content {
+  transform: translateY(0.75rem) scale(0.98);
+}
+
+@media (max-width: 640px) {
+  .modal-content {
+    padding: var(--space-5);
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+  }
 }
 </style>

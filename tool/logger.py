@@ -1,9 +1,9 @@
 import logging
-import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
+
 
 def setup_logger(
     name: str,
@@ -16,7 +16,7 @@ def setup_logger(
     """Centralized logging setup."""
     logger = logging.getLogger(name)
     logger.setLevel(log_level.upper())
-    
+
     # Clear existing handlers
     if logger.hasHandlers():
         logger.handlers.clear()

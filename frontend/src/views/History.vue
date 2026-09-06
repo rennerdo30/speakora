@@ -1,46 +1,94 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import axios from 'axios'
-import { Search, Filter, Trash2, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import {
+  Search,
+  Filter,
+  Trash2,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  SearchX,
+  Inbox
+} from 'lucide-vue-next'
 import JobDetails from '../components/JobDetails.vue'
+import { HISTORY_PAGE_SIZE, SKELETON_ROW_COUNT } from '../constants'
+import { fileNameOf, formatDate, toTimestamp } from '../utils/format'
 
-interface Job {
+interface HistoryJob {
   id: string
   status: string
   input_file: string
   target_lang: string
+  created_at?: string
   completed_at: string | null
 }
 
-const jobs = ref<Job[]>([])
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'cancelled', label: 'Cancelled' }
+]
+
+const jobs = ref<HistoryJob[]>([])
 const loading = ref(true)
+const error = ref('')
 const searchQuery = ref('')
 const statusFilter = ref('all')
+const currentPage = ref(1)
 const selectedJobId = ref<string | null>(null)
 const showDetailsModal = ref(false)
 
 const fetchHistory = async () => {
   loading.value = true
+  error.value = ''
   try {
-    const res = await axios.get('/api/jobs')
-    // For history, we usually show completed, failed, or just all in descending order
-    jobs.value = res.data.sort((a: any, b: any) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    const res = await axios.get<HistoryJob[]>('/api/jobs')
+    jobs.value = [...res.data].sort(
+      (a, b) => toTimestamp(b.created_at) - toTimestamp(a.created_at)
     )
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Failed to fetch history', err)
+    error.value = 'Could not load the translation history. Check that the backend is running.'
   } finally {
     loading.value = false
   }
 }
 
-const filteredJobs = () => {
-  return jobs.value.filter(job => {
-    const matchesSearch = job.input_file.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-                         job.id.includes(searchQuery.value)
+const filteredJobs = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  return jobs.value.filter((job) => {
+    const matchesSearch =
+      !query || job.input_file.toLowerCase().includes(query) || job.id.toLowerCase().includes(query)
     const matchesStatus = statusFilter.value === 'all' || job.status === statusFilter.value
     return matchesSearch && matchesStatus
   })
+})
+
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredJobs.value.length / HISTORY_PAGE_SIZE)))
+
+const pagedJobs = computed(() => {
+  const start = (currentPage.value - 1) * HISTORY_PAGE_SIZE
+  return filteredJobs.value.slice(start, start + HISTORY_PAGE_SIZE)
+})
+
+const hasFilters = computed(() => searchQuery.value.trim() !== '' || statusFilter.value !== 'all')
+
+// Filtering can shrink the list below the current page.
+watch([filteredJobs, pageCount], () => {
+  if (currentPage.value > pageCount.value) currentPage.value = pageCount.value
+})
+
+const goToPage = (page: number) => {
+  currentPage.value = Math.min(Math.max(1, page), pageCount.value)
+}
+
+const clearFilters = () => {
+  searchQuery.value = ''
+  statusFilter.value = 'all'
 }
 
 const openDetails = (id: string) => {
@@ -48,14 +96,15 @@ const openDetails = (id: string) => {
   showDetailsModal.value = true
 }
 
-const deleteJob = async (id: string) => {
-  if (confirm('Are you sure you want to delete this job record?')) {
-    try {
-      await axios.delete(`/api/jobs/${id}`)
-      fetchHistory()
-    } catch (err) {
-      console.error('Failed to delete job', err)
-    }
+const deleteJob = async (job: HistoryJob) => {
+  if (!confirm(`Delete the record for "${fileNameOf(job.input_file)}"?`)) return
+
+  try {
+    await axios.delete(`/api/jobs/${job.id}`)
+    await fetchHistory()
+  } catch (err: unknown) {
+    console.error('Failed to delete job', err)
+    error.value = 'Could not delete that record. Please try again.'
   }
 }
 
@@ -64,76 +113,154 @@ onMounted(fetchHistory)
 
 <template>
   <div class="history-view fade-in">
-    <header class="header">
-      <div class="header-content">
-        <h1>Translation History</h1>
-        <p class="text-secondary">View and manage past translation jobs</p>
+    <header class="page-header">
+      <div>
+        <h1>Translation history</h1>
+        <p class="page-subtitle">Review and manage past translation jobs</p>
       </div>
     </header>
 
-    <div class="filters-bar glass-card">
-      <div class="search-box">
-        <Search :size="18" />
-        <input v-model="searchQuery" type="text" placeholder="Search by file name or ID..." />
+    <form class="filters-bar glass-card" role="search" @submit.prevent>
+      <div class="field">
+        <label class="sr-only" for="history-search">Search history</label>
+        <span class="field-icon" aria-hidden="true"><Search :size="18" /></span>
+        <input
+          id="history-search"
+          v-model="searchQuery"
+          type="search"
+          class="form-input has-icon"
+          placeholder="Search by file name or job ID…"
+        />
       </div>
-      <div class="status-select">
-        <Filter :size="18" />
-        <select v-model="statusFilter">
-          <option value="all">All Status</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
-          <option value="paused">Paused</option>
+      <div class="field">
+        <label class="sr-only" for="history-status">Filter by status</label>
+        <span class="field-icon" aria-hidden="true"><Filter :size="18" /></span>
+        <select id="history-status" v-model="statusFilter" class="form-input has-icon">
+          <option v-for="option in STATUS_FILTERS" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
         </select>
       </div>
-    </div>
+    </form>
 
-    <div class="history-list glass-card">
-      <div v-if="loading" class="loading-state">
-        <div class="spinner"></div>
+    <section class="history-list glass-card" aria-label="Translation history">
+      <p v-if="error" class="alert alert-danger error-banner" role="alert">
+        <AlertTriangle :size="18" aria-hidden="true" />
+        <span>{{ error }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" @click="fetchHistory">Retry</button>
+      </p>
+
+      <div v-if="loading" class="skeleton-rows">
+        <p class="sr-only" role="status">Loading history…</p>
+        <div
+          v-for="row in SKELETON_ROW_COUNT"
+          :key="row"
+          class="skeleton skeleton-row"
+          aria-hidden="true"
+        ></div>
       </div>
-      <div v-else-if="filteredJobs().length === 0" class="empty-state">
-        No records found matching your criteria.
+
+      <div v-else-if="filteredJobs.length === 0" class="empty-state">
+        <span class="empty-state-icon">
+          <SearchX v-if="hasFilters" :size="22" aria-hidden="true" />
+          <Inbox v-else :size="22" aria-hidden="true" />
+        </span>
+        <p class="empty-state-title">
+          {{ hasFilters ? 'No matching records' : 'No history yet' }}
+        </p>
+        <p class="empty-state-body">
+          {{
+            hasFilters
+              ? 'Try a different search term or status filter.'
+              : 'Completed and failed translations are listed here once you have run a job.'
+          }}
+        </p>
+        <button
+          v-if="hasFilters"
+          type="button"
+          class="btn btn-secondary"
+          @click="clearFilters"
+        >
+          Clear filters
+        </button>
       </div>
-      <div v-else class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Input File</th>
-              <th>Language</th>
-              <th class="text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="job in filteredJobs()" :key="job.id">
-              <td>{{ new Date(job.created_at).toLocaleDateString() }}</td>
-              <td>
-                <span :class="'badge badge-' + job.status.toLowerCase()">{{ job.status }}</span>
-              </td>
-              <td class="file-cell" :title="job.input_file">
-                {{ job.input_file.split('/').pop() }}
-              </td>
-              <td>{{ job.target_lang.toUpperCase() }}</td>
-              <td class="actions-cell">
-                <button class="action-btn" @click="openDetails(job.id)">
-                  <ExternalLink :size="16" />
-                </button>
-                <button class="action-btn delete" @click="deleteJob(job.id)">
-                  <Trash2 :size="16" />
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      
-      <div class="pagination">
-        <button class="btn btn-secondary btn-sm" disabled><ChevronLeft :size="16" /></button>
-        <span class="page-info">Page 1 of 1</span>
-        <button class="btn btn-secondary btn-sm" disabled><ChevronRight :size="16" /></button>
-      </div>
-    </div>
+
+      <template v-else>
+        <div class="table-container">
+          <table class="data-table">
+            <caption class="sr-only">
+              Past translation jobs, newest first
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Status</th>
+                <th scope="col">Input file</th>
+                <th scope="col">Language</th>
+                <th scope="col"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="job in pagedJobs" :key="job.id">
+                <td data-label="Date">{{ formatDate(job.created_at) }}</td>
+                <td data-label="Status">
+                  <span :class="`badge badge-${job.status.toLowerCase()}`">{{ job.status }}</span>
+                </td>
+                <td data-label="File" class="file-cell">
+                  <span :title="job.input_file">{{ fileNameOf(job.input_file) }}</span>
+                </td>
+                <td data-label="Language">{{ job.target_lang.toUpperCase() }}</td>
+                <td class="actions-cell is-stacked-full">
+                  <button
+                    type="button"
+                    class="icon-btn"
+                    aria-label="View job details"
+                    title="View details"
+                    aria-haspopup="dialog"
+                    @click="openDetails(job.id)"
+                  >
+                    <ExternalLink :size="16" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn is-danger"
+                    aria-label="Delete job record"
+                    title="Delete record"
+                    @click="deleteJob(job)"
+                  >
+                    <Trash2 :size="16" aria-hidden="true" />
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <nav v-if="pageCount > 1" class="pagination" aria-label="History pages">
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="currentPage === 1"
+            aria-label="Previous page"
+            @click="goToPage(currentPage - 1)"
+          >
+            <ChevronLeft :size="16" aria-hidden="true" />
+          </button>
+          <span class="page-info" aria-live="polite">
+            Page {{ currentPage }} of {{ pageCount }}
+          </span>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="currentPage === pageCount"
+            aria-label="Next page"
+            @click="goToPage(currentPage + 1)"
+          >
+            <ChevronRight :size="16" aria-hidden="true" />
+          </button>
+        </nav>
+      </template>
+    </section>
 
     <JobDetails
       :show="showDetailsModal"
@@ -144,29 +271,124 @@ onMounted(fetchHistory)
 </template>
 
 <style scoped>
-.history-view { padding: 10px; }
-.header { margin-bottom: 24px; }
-.filters-bar { padding: 16px; display: flex; gap: 20px; margin-bottom: 20px; }
-.search-box { flex-grow: 1; position: relative; display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-color); }
-.search-box input { background: transparent; border: none; color: white; width: 100%; outline: none; }
-.status-select { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-color); }
-.status-select select { background: transparent; border: none; color: white; outline: none; cursor: pointer; }
+.history-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
 
-.history-list { padding: 0; overflow: hidden; }
-.table-container { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th { text-align: left; padding: 16px; color: var(--text-muted); font-size: 0.75rem; border-bottom: 1px solid var(--border-color); }
-td { padding: 16px; border-bottom: 1px solid var(--border-color); font-size: 0.875rem; }
-.file-cell { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.actions-cell { display: flex; gap: 8px; justify-content: flex-end; }
-.action-btn { background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.action-btn:hover { background: var(--surface-hover); color: white; }
-.action-btn.delete:hover { color: #f87171; }
+.page-subtitle {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+}
 
-.pagination { padding: 16px; display: flex; justify-content: center; align-items: center; gap: 20px; }
-.page-info { font-size: 0.875rem; color: var(--text-muted); }
+.filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
 
-.loading-state, .empty-state { padding: 60px; text-align: center; color: var(--text-muted); }
-.spinner { width: 30px; height: 30px; border: 2px solid var(--border-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.field:first-child {
+  flex: 1 1 18rem;
+}
+
+.field-icon {
+  position: absolute;
+  left: var(--space-3);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.form-input.has-icon {
+  padding-left: var(--space-10);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.error-banner {
+  align-items: center;
+  margin: var(--space-4) var(--space-4) 0;
+}
+
+.table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.data-table {
+  min-width: 44rem;
+}
+
+.file-cell span {
+  display: block;
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Kept as a table cell so the row's bottom border stays aligned; the icon
+   buttons are inline-flex already. */
+.actions-cell {
+  white-space: nowrap;
+}
+
+.actions-cell .icon-btn + .icon-btn {
+  margin-left: var(--space-2);
+}
+
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.skeleton-row {
+  height: 2.75rem;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-top: 1px solid var(--border-color);
+}
+
+.page-info {
+  color: var(--text-muted);
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .data-table {
+    min-width: 0;
+  }
+
+  .table-container {
+    overflow-x: visible;
+  }
+
+  .file-cell span {
+    max-width: none;
+  }
+}
 </style>
