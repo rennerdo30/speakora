@@ -2,14 +2,23 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Any
-import json
 from sqlalchemy import (
-    create_engine, Column, String, Float, DateTime, Integer, Text, ForeignKey, PickleType, Boolean
+    create_engine,
+    Column,
+    String,
+    Float,
+    DateTime,
+    Integer,
+    Text,
+    ForeignKey,
+    PickleType,
+    Boolean,
 )
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 import uuid
 
 Base = declarative_base()
+
 
 class JobStatus(str, Enum):
     QUEUED = "queued"
@@ -18,9 +27,10 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+
 class Job(Base):
     __tablename__ = "jobs"
-    
+
     id = Column(String, primary_key=True)
     status = Column(String, default=JobStatus.QUEUED)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -39,11 +49,14 @@ class Job(Base):
     expressive = Column(Boolean, default=False)
     reference_audio = Column(Text, nullable=True)
 
-    checkpoints = relationship("Checkpoint", back_populates="job", cascade="all, delete-orphan")
+    checkpoints = relationship(
+        "Checkpoint", back_populates="job", cascade="all, delete-orphan"
+    )
+
 
 class Checkpoint(Base):
     __tablename__ = "checkpoints"
-    
+
     id = Column(String, primary_key=True)
     job_id = Column(String, ForeignKey("jobs.id"))
     checkpoint_data = Column(PickleType)
@@ -54,6 +67,7 @@ class Checkpoint(Base):
 
     job = relationship("Job", back_populates="checkpoints")
 
+
 class JobQueue:
     def __init__(self, db_path: Path):
         self.db_path = db_path
@@ -62,13 +76,13 @@ class JobQueue:
         self.Session = sessionmaker(bind=self.engine)
 
     def enqueue(
-        self, 
-        input_file: str, 
-        target_lang: str, 
-        source_lang: Optional[str] = "auto", 
+        self,
+        input_file: str,
+        target_lang: str,
+        source_lang: Optional[str] = "auto",
         priority: int = 0,
         expressive: bool = False,
-        reference_audio: Optional[str] = None
+        reference_audio: Optional[str] = None,
     ) -> str:
         session = self.Session()
         job_id = str(uuid.uuid4())
@@ -79,7 +93,7 @@ class JobQueue:
             source_lang=source_lang,
             priority=priority,
             expressive=expressive,
-            reference_audio=reference_audio
+            reference_audio=reference_audio,
         )
         session.add(job)
         session.commit()
@@ -119,14 +133,13 @@ class JobQueue:
                 job.paused_at = datetime.now(timezone.utc)
             elif status == JobStatus.COMPLETED:
                 job.completed_at = datetime.now(timezone.utc)
-            
+
             for key, value in kwargs.items():
                 if hasattr(job, key):
                     setattr(job, key, value)
-            
+
             session.commit()
         session.close()
-
 
     def save_checkpoint(self, job_id: str, data: Any, audio_position: int = 0):
         session = self.Session()
@@ -135,7 +148,7 @@ class JobQueue:
             id=checkpoint_id,
             job_id=job_id,
             checkpoint_data=data,
-            audio_position=audio_position
+            audio_position=audio_position,
         )
         session.add(checkpoint)
         session.commit()
@@ -143,7 +156,12 @@ class JobQueue:
 
     def get_latest_checkpoint(self, job_id: str) -> Optional[Checkpoint]:
         session = self.Session()
-        checkpoint = session.query(Checkpoint).filter(Checkpoint.job_id == job_id).order_by(Checkpoint.created_at.desc()).first()
+        checkpoint = (
+            session.query(Checkpoint)
+            .filter(Checkpoint.job_id == job_id)
+            .order_by(Checkpoint.created_at.desc())
+            .first()
+        )
         if checkpoint:
             session.expunge(checkpoint)
         session.close()

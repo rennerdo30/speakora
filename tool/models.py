@@ -1,10 +1,10 @@
 import torch
 from transformers import AutoProcessor, SeamlessM4Tv2Model
-from pathlib import Path
 from typing import Optional, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class ModelManager:
     def __init__(
@@ -13,14 +13,14 @@ class ModelManager:
         device: str = "auto",
         dtype: str = "float16",
         cache_dir: Optional[str] = None,
-        expressive: bool = False
+        expressive: bool = False,
     ):
         self.model_size = model_size
         self.device = device
         self.dtype = dtype
         self.cache_dir = cache_dir
         self.expressive = expressive
-        
+
         # For expressive mode, we use the standard model but with special handling
         # SeamlessM4T v2 doesn't have a separate expressive model, but we can use
         # reference audio to preserve voice characteristics
@@ -34,7 +34,7 @@ class ModelManager:
             return self.model, self.processor
 
         logger.info(f"Loading model {self.model_name} on {self.device}...")
-        
+
         torch_dtype = torch.float32
         if self.dtype == "float16" and self.device != "cpu":
             torch_dtype = torch.float16
@@ -47,14 +47,12 @@ class ModelManager:
             self.processor = AutoProcessor.from_pretrained(
                 self.model_name,
                 cache_dir=self.cache_dir,
-                use_fast=False  # Force use of SentencePiece tokenizer
+                use_fast=False,  # Force use of SentencePiece tokenizer
             )
             self.model = SeamlessM4Tv2Model.from_pretrained(
-                self.model_name,
-                torch_dtype=torch_dtype,
-                cache_dir=self.cache_dir
+                self.model_name, torch_dtype=torch_dtype, cache_dir=self.cache_dir
             ).to(self.device)
-            
+
             logger.info(f"Model {self.model_name} loaded successfully.")
             return self.model, self.processor
         except Exception as e:

@@ -40,7 +40,7 @@ jobs:
       
       - name: Run tests with coverage
         run: |
-          pytest --cov=tool --cov-report=xml --cov-report=term-missing --cov-fail-under=100 --verbose
+          python -m pytest --cov=tool --cov-report=xml --cov-report=term-missing --cov-fail-under=100 --verbose
       
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
