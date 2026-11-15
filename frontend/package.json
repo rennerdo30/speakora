@@ -10,16 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "axios": "^1.6.0",
-    "lucide-vue-next": "^0.289.0",
-    "pinia": "^2.1.7",
-    "vue": "^3.3.7",
-    "vue-router": "^4.2.5"
+    "axios": "^1.21.1",
+    "lucide-vue-next": "^1.0.0",
+    "pinia": "^4.1.0",
+    "vue": "^3.5.45",
+    "vue-router": "^5.5.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^4.4.0",
-    "typescript": "^5.2.2",
-    "vite": "^4.5.0",
-    "vue-tsc": "^3.2.2"
+    "@vitejs/plugin-vue": "^6.0.10",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vue-tsc": "^3.3.14"
   }
 }
